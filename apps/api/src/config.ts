@@ -16,6 +16,11 @@ const envSchema = z.object({
   SMTP_URL: z.string().optional().default(''),
   ALERT_EMAIL: z.string().optional().default(''),
   CORS_ORIGINS: z.string().optional().default(''),
+  // حدود المعدل — منخفضة بما يكفي لمنع الإساءة، متسامحة مع CGNAT (IP مشترك في مصر)
+  RATE_LIMIT_PER_IP_MIN: z.coerce.number().default(60),
+  RATE_LIMIT_PER_SESSION_MIN: z.coerce.number().default(12),
+  RATE_LIMIT_PER_CLIENT_HOUR: z.coerce.number().default(1000),
+  RATE_LIMIT_DISABLED: z.coerce.boolean().default(false),
 });
 
 const parsed = envSchema.safeParse(process.env);

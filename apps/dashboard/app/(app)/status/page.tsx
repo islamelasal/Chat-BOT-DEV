@@ -1,6 +1,7 @@
 import { apiServer } from '@/lib/api';
 import { Badge, Card, CardHeader, Table } from '@/components/ui';
 import LiveOverview from '@/components/live-overview';
+import AlertsList from '@/components/alerts-list';
 
 export default async function StatusPage() {
   const overview = await apiServer<any>('/status/overview');
@@ -56,22 +57,7 @@ export default async function StatusPage() {
         </Card>
       </div>
 
-      {overview.alerts.length > 0 && (
-        <Card>
-          <CardHeader title="التنبيهات" />
-          <div className="divide-y divide-slate-50">
-            {overview.alerts.map((a: any) => (
-              <div key={a.id} className="px-5 py-3">
-                <div className="flex items-center gap-2">
-                  <Badge tone={a.severity === 'critical' ? 'red' : 'amber'}>{a.severity}</Badge>
-                  <span className="text-sm font-bold text-slate-700">{a.title}</span>
-                </div>
-                {a.body && <p className="mt-1 text-xs text-slate-500">{a.body}</p>}
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <AlertsList alerts={overview.alerts} />
     </div>
   );
 }

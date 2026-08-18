@@ -102,7 +102,7 @@ export class WidgetController {
     }
 
     const ip = (req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip ?? 'unknown').trim();
-    if (!(await this.widgets.rateLimit(ip, sess.cid))) {
+    if (!(await this.widgets.rateLimit(ip, sess.cid, sess.vid))) {
       throw new HttpException('طلبات كثيرة جداً — حاول بعد قليل', 429);
     }
 

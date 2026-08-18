@@ -104,11 +104,22 @@ export class WidgetService {
     return false;
   }
 
-  /** حدود المعدل: 20 طلب/دقيقة لكل IP + 300/ساعة لكل عميل */
-  async rateLimit(key: string, clientId: string): Promise<boolean> {
-    const perIp = await cache.incr(`rl:ip:${key}:${Math.floor(Date.now() / 60_000)}`, 60);
-    const perClient = await cache.incr(`rl:client:${clientId}:${Math.floor(Date.now() / 3600_000)}`, 3600);
-    return perIp <= 20 && perClient <= 300;
+  /** حدود المعدل متعددة الطبقات:
+   *  1. لكل جلسة زائر (أدق من IP — يعمل حتى خلف CGNAT)
+   *  2. لكل IP (حماية عامة بسقف أرحم للشبكات المشتركة)
+   *  3. لكل عميل/ساعة (سقف الخدمة الكلي) */
+  async rateLimit(ip: string, clientId: string, visitorId: string): Promise<boolean> {
+    if (config.RATE_LIMIT_DISABLED) return true;
+    const minute = Math.floor(Date.now() / 60_000);
+    const hour = Math.floor(Date.now() / 3600_000);
+    const perSession = await cache.incr(`rl:visitor:${visitorId}:${minute}`, 60);
+    const perIp = await cache.incr(`rl:ip:${ip}:${minute}`, 60);
+    const perClient = await cache.incr(`rl:client:${clientId}:${hour}`, 3600);
+    return (
+      perSession <= config.RATE_LIMIT_PER_SESSION_MIN &&
+      perIp <= config.RATE_LIMIT_PER_IP_MIN &&
+      perClient <= config.RATE_LIMIT_PER_CLIENT_HOUR
+    );
   }
 
   async getOrCreateConversation(sess: WidgetSession, page?: PageContext): Promise<{ conv: Conversation; isNew: boolean }> {

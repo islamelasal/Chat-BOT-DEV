@@ -11,6 +11,7 @@ import {
   BarChart3,
   MessagesSquare,
   Store,
+  Settings,
   LogOut,
   Bot as Logo,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ const NAV = [
   { href: '/usage', label: 'الاستهلاك والعدادات', icon: BarChart3 },
   { href: '/conversations', label: 'المحادثات', icon: MessagesSquare },
   { href: '/demo-store', label: 'متجر تجريبي (ديمو)', icon: Store },
+  { href: '/settings', label: 'الإعدادات', icon: Settings },
 ];
 
 export default function Sidebar() {

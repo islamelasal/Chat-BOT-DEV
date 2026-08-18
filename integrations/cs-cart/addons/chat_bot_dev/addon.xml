@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<addon scheme="3.0">
+    <id>chat_bot_dev</id>
+    <version>1.0</version>
+    <priority>100</priority>
+    <position>0</position>
+    <default_language>en</default_language>
+    <auto_install>MULTIVENDOR,ULTIMATE</auto_install>
+    <status>active</status>
+
+    <settings layout="separate">
+        <sections>
+            <section id="general">
+                <items>
+                    <item id="cbd_enabled">
+                        <type>checkbox</type>
+                        <default_value>Y</default_value>
+                    </item>
+                    <item id="cbd_widget_url">
+                        <type>input</type>
+                        <default_value>https://widget.chatbotdev.app/w.js?id=clt_elshawwa</default_value>
+                    </item>
+                    <item id="cbd_hook_note">
+                        <type>info</type>
+                        <handler>fn_chat_bot_dev_settings_note</handler>
+                    </item>
+                </items>
+            </section>
+        </sections>
+    </settings>
+
+    <queries>
+        <item for="install">DROP TABLE IF EXISTS ?:chat_bot_dev_events;</item>
+        <item for="install">
+            CREATE TABLE ?:chat_bot_dev_events (
+                event_id int(11) unsigned NOT NULL auto_increment,
+                event_type varchar(32) NOT NULL DEFAULT 'chat',
+                page_url varchar(255) NOT NULL DEFAULT '',
+                created_at int(11) unsigned NOT NULL DEFAULT 0,
+                PRIMARY KEY (event_id)
+            ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+        </item>
+        <item for="uninstall">DROP TABLE IF EXISTS ?:chat_bot_dev_events;</item>
+    </queries>
+</addon>
