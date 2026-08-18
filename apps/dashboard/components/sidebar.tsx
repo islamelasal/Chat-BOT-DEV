@@ -11,6 +11,7 @@ import {
   BarChart3,
   MessagesSquare,
   Store,
+  Package,
   Settings,
   UserPlus,
   LogOut,
@@ -26,6 +27,7 @@ const NAV = [
   { href: '/usage', label: 'الاستهلاك والعدادات', icon: BarChart3 },
   { href: '/conversations', label: 'المحادثات', icon: MessagesSquare },
   { href: '/leads', label: 'العملاء المحتملون', icon: UserPlus },
+  { href: '/catalog', label: 'كتالوج المنتجات', icon: Package },
   { href: '/demo-store', label: 'متجر تجريبي (ديمو)', icon: Store },
   { href: '/settings', label: 'الإعدادات', icon: Settings },
 ];

@@ -57,6 +57,9 @@ export const themeUpdateSchema = z.object({
   handoffWhatsapp: z.string().max(20).optional().default(''),
   handoffPhone: z.string().max(20).optional().default(''),
   handoffEmail: z.string().email().optional().default(''),
+  bubbleIcon: z.enum(['chat', 'key', 'custom']).optional().default('chat'),
+  bubbleIconUrl: z.string().max(2000).optional().default(''),
+  cursorKey: z.boolean().optional().default(false),
 });
 
 export const botCreateSchema = z.object({

@@ -37,7 +37,8 @@ async function bootstrap() {
   ].find((p) => existsSync(join(p, 'w.js')));
   if (publicDir) {
     app.use('/w.js', express.static(join(publicDir, 'w.js')));
-    Logger.log('🟢 محمّل الودجت w.js جاهز', 'Widget');
+    app.use('/assets', express.static(join(publicDir, 'assets'), { maxAge: '7d' }));
+    Logger.log('🟢 محمّل الودجت w.js + الأصول (/assets) جاهزان', 'Widget');
   } else {
     Logger.warn('⚠️ لم يُعثر على w.js — تأكد من وجود public/w.js', 'Widget');
   }
@@ -90,7 +91,23 @@ async function bootstrap() {
     Logger.log('👷 العامل الخلفي يعمل داخل العملية (نبضات + Dead-Man Switch + تنظيف)', 'Worker');
   }
 
-  // 5) الإغلاق النظيف
+  // 5) جدولة مزامنة كتالوجات العملاء (الفيد الحي) — تعمل دائماً حتى واللوحة مغلقة
+  const { CatalogService } = require('./catalog.service.js') as typeof import('./catalog.service.js');
+  const catalogService = app.get(CatalogService);
+  if (config.CATALOG_SYNC_ON_BOOT) {
+    setTimeout(() => {
+      catalogService.syncAll().catch((err: Error) => Logger.warn(`مزامنة الكتالوج عند الإقلاع فشلت: ${err.message}`, 'Catalog'));
+    }, 8_000); // ننتظر اكتمال الإقلاع
+  }
+  if (config.CATALOG_SYNC_INTERVAL_MS > 0) {
+    const catalogTimer = setInterval(() => {
+      catalogService.syncAll().catch(() => {});
+    }, config.CATALOG_SYNC_INTERVAL_MS);
+    catalogTimer.unref?.();
+    Logger.log(`🛒 جدولة كتالوجات العملاء: كل ${Math.round(config.CATALOG_SYNC_INTERVAL_MS / 60000)} دقيقة`, 'Catalog');
+  }
+
+  // 6) الإغلاق النظيف
   const shutdown = async () => {
     workerRuntime?.stop();
     await app.close();

@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
       { source: '/backend/:path*', destination: `${API_INTERNAL}/:path*` },
       { source: '/w.js', destination: `${API_INTERNAL}/w.js` },
       { source: '/w-assets/:path*', destination: `${API_INTERNAL}/w-assets/:path*` },
+      { source: '/assets/:path*', destination: `${API_INTERNAL}/assets/:path*` },
       { source: '/w/:path*', destination: `${API_INTERNAL}/w/:path*` },
     ];
   },

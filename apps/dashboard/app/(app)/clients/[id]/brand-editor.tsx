@@ -3,9 +3,9 @@
 import { useRef, useState } from 'react';
 import { Button, Card, CardHeader, Field, Input } from '@/components/ui';
 
-/** تحسين جودة الصورة: تكبير ×2 (LANCZOS مكافئ عبر خطوتين) + توضيح خفيف + إزالة خلفية بيضاء
+/** تحسين جودة الصورة: تكبير ×2 + توضيح خفيف + إزالة خلفية بيضاء
  *  كل شيء client-side — لا تُرسل الصورة لأي خادم */
-function enhanceImage(img: HTMLImageElement): { dataUrl: string; width: number; height: number } {
+export function enhanceImage(img: HTMLImageElement): { dataUrl: string; width: number; height: number } {
   const MAX_W = 512;
   const scale = Math.min(2, MAX_W / img.naturalWidth);
   const w = Math.max(64, Math.round(img.naturalWidth * scale));

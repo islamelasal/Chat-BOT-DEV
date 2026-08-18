@@ -34,6 +34,9 @@ export interface ThemeConfig {
   handoffWhatsapp: string; // رقم واتساب (دولي بدون +)
   handoffPhone: string;   // رقم الهاتف
   handoffEmail: string;   // البريد
+  bubbleIcon: 'chat' | 'key' | 'custom'; // أيقونة الفقاعة
+  bubbleIconUrl: string;  // أيقونة مخصصة (تُرفع من اللوحة — تُستخدم أيضاً كمؤشر)
+  cursorKey: boolean;     // مؤشر مفتاح عند التحويم (حركة فتح احترافية)
 }
 
 export interface BrandKit {

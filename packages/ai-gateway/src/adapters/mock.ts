@@ -4,6 +4,7 @@
  * في الإنتاج يُعطَّل ويبقى للتجارب فقط.
  */
 import type { ChatChunk, ChatParams, HealthInfo, ProviderAdapter } from '../types.js';
+import type { ChatMessageLite } from '@cbd/shared';
 
 const REPLIES: Array<{ keys: RegExp; reply: string }> = [
   {
@@ -75,6 +76,46 @@ export class MockAdapter implements ProviderAdapter {
     this.wordsPerMin = opts.wordsPerMin ?? 900;
   }
 
+  /** يحلل كتلة 【CATALOG】 المحقونة في رسالة النظام ويعيد منتجات مطابقة لرسالة الزائر */
+  private catalogReply(messages: ChatMessageLite[], userText: string): string | null {
+    const system = messages.find((m) => m.role === 'system')?.content ?? '';
+    const idx = system.indexOf('【CATALOG】');
+    if (idx < 0) return null;
+    const block = system.slice(idx).split('\n').slice(1, 8);
+    const products = block
+      .map((line) => line.trim())
+      .filter((l) => l.startsWith('- '))
+      .map((l) => {
+        const [name, price, currency, category, url, stock] = l.slice(2).split('|');
+        return { name: name ?? '', price: price ?? '', currency: currency ?? 'EGP', category: category ?? '', url: url ?? '', stock: stock ?? 'متوفر' };
+      })
+      .filter((p) => p.name);
+    if (!products.length) return null;
+    // اختر المنتج الأكثر تطابقاً مع نص الزائر
+    const words = userText.split(/[\s،,؟?]+/).filter((w) => w.length > 2);
+    const scored = products
+      .map((p) => ({
+        p,
+        score: words.reduce((acc, w) => acc + (p.name.includes(w) ? 2 : p.category.includes(w) ? 1 : 0), 0),
+      }))
+      .sort((a, b) => b.score - a.score);
+    const best = scored[0]!;
+    if (best.score <= 0) return null;
+    const { p } = best;
+    const lines = [
+      `متوفر عندنا ✅`,
+      ``,
+      `▎${p.name}`,
+      p.category ? `القسم: ${p.category}` : '',
+      `السعر: ${p.price} ${p.currency}${p.stock !== 'متوفر' ? ' (متوفر حالياً بكمية محدودة)' : ''}`,
+      ``,
+      p.url ? `تقدر تشوف تفاصيله وتطلبه من هنا 👇\n${p.url}` : `تقدر تطلبه من الموقع أو تتصل بينا على 16959.`,
+      ``,
+      `تحب أقولك عن منتجات مشابهة أو أساعدك بحاجة تانية؟ 😊`,
+    ].filter((l) => l !== '');
+    return lines.join('\n');
+  }
+
   private pickReply(text: string): string {
     for (const entry of REPLIES) {
       if (entry.keys.test(text)) return entry.reply;
@@ -84,7 +125,10 @@ export class MockAdapter implements ProviderAdapter {
 
   async *chat(params: ChatParams): AsyncIterable<ChatChunk> {
     const lastUser = [...params.messages].reverse().find((m) => m.role === 'user');
-    const reply = this.pickReply(lastUser?.content ?? '');
+    const userText = lastUser?.content ?? '';
+    // الأولوية للكتالوج الحي (منتجات حقيقية من الفيد) إن وُجد تطابق
+    const catalog = this.catalogReply(params.messages, userText);
+    const reply = catalog ?? this.pickReply(userText);
     const words = reply.split(/(\s+)/);
     const msPerWord = 60_000 / this.wordsPerMin;
     for (const w of words) {

@@ -187,3 +187,53 @@ CREATE TABLE IF NOT EXISTS leads (
 );
 
 CREATE INDEX IF NOT EXISTS idx_leads_client ON leads (client_id, created_at);
+
+-- ─────────────────── كتالوج منتجات العملاء (الفيد الحي) ───────────────────
+-- جدول مصدر الفيد لكل عميل (رابط + حالة آخر مزامنة)
+CREATE TABLE IF NOT EXISTS client_catalogs (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL UNIQUE,
+  source_url TEXT NOT NULL DEFAULT '',
+  format TEXT NOT NULL DEFAULT 'auto',          -- auto | csv | xml | json
+  sync_status TEXT NOT NULL DEFAULT 'idle',     -- idle | syncing | ok | error
+  items_total INTEGER NOT NULL DEFAULT 0,
+  last_synced_at INTEGER,
+  last_success_at INTEGER,
+  last_error TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+
+-- جدول المنتجات — كل صف منتج واحد (تفرد: عميل + معرّف خارجي)
+CREATE TABLE IF NOT EXISTS catalog_products (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '',
+  brand TEXT NOT NULL DEFAULT '',
+  price REAL NOT NULL DEFAULT 0,
+  old_price REAL,
+  currency TEXT NOT NULL DEFAULT 'EGP',
+  in_stock INTEGER NOT NULL DEFAULT 1,
+  image_url TEXT NOT NULL DEFAULT '',
+  product_url TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  content_hash TEXT NOT NULL DEFAULT '',        -- بصمة المحتوى للكشف عن التغييرات
+  first_seen_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE (client_id, external_id)
+);
+
+-- سجل تغييرات الكتالوج (new | updated | price_changed | stock_changed)
+CREATE TABLE IF NOT EXISTS catalog_changes (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  change_type TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_catprod_client ON catalog_products (client_id, category);
+CREATE INDEX IF NOT EXISTS idx_catprod_name ON catalog_products (client_id, name);
+CREATE INDEX IF NOT EXISTS idx_catchange_client ON catalog_changes (client_id, created_at);

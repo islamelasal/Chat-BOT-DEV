@@ -50,6 +50,9 @@ const ELSHAWWA_THEME: ThemeConfig = {
   handoffWhatsapp: '201153666660',
   handoffPhone: '16959',
   handoffEmail: 'info@elshwwa.com',
+  bubbleIcon: 'key',
+  bubbleIconUrl: '',
+  cursorKey: true,
 };
 
 const ELSHAWWA_KNOWLEDGE = [
@@ -213,6 +216,15 @@ export async function seedDemo(): Promise<{ seeded: boolean }> {
       id('kn'), botId, k.title, k.content, k.source, now()
     );
   }
+
+  // ── كتالوج الشوا (الفيد الحي) ──
+  await db.run(
+    `INSERT INTO client_catalogs (id, client_id, source_url, format, sync_status, items_total, created_at)
+     VALUES (?, ?, ?, 'auto', 'idle', 0, ?)`,
+    'cat_elshawwa', clientId,
+    'https://elshawwa.com/index.php?dispatch=elshawwa_catalog.feed&sl=ar',
+    now()
+  );
 
   // ── إعدادات ──
   await db.run('INSERT INTO settings (key, value) VALUES (?, ?)', 'site_name', 'Chat Bot Dev');

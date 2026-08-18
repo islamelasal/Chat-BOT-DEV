@@ -25,6 +25,9 @@ const envSchema = z.object({
   SCRAPLING_URL: z.string().optional().default(''),
   // SSRF: السماح بزحف العناوين الخاصة (true في الديمو للاختبار المحلي — false في الإنتاج)
   CRAWL_ALLOW_PRIVATE: z.coerce.boolean().default(true),
+  // مزامنة كتالوجات العملاء (الفيد الحي) — كل 6 ساعات + مزامنة أولى عند الإقلاع
+  CATALOG_SYNC_INTERVAL_MS: z.coerce.number().default(21600000),
+  CATALOG_SYNC_ON_BOOT: z.coerce.boolean().default(true),
 });
 
 const parsed = envSchema.safeParse(process.env);

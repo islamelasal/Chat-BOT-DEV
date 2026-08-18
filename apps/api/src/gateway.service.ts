@@ -17,6 +17,7 @@ import {
 import type { Bot, ChatMessageLite, PageContext, RoutingPolicy, RoutingTier } from '@cbd/shared';
 import type { Candidate, FinalOutcome } from '@cbd/gateway';
 import { decryptSecret } from './crypto.js';
+import { CatalogService } from './catalog.service.js';
 
 export interface ChatContext {
   bot: Bot;
@@ -33,6 +34,8 @@ export interface ChatStreamResult {
 
 @Injectable()
 export class GatewayService {
+  constructor(private readonly catalog: CatalogService) {}
+
   /** حالة مشتركة لكل العملية — النبضات تسجل فيها وهي نفسها التي يقرأها الراوتر */
   readonly breakers = new CircuitBreaker({
     baseCooldownMs: 15_000,
@@ -113,15 +116,33 @@ export class GatewayService {
     return best.map((s) => `【${s.c.title}】\n${s.c.content}`.slice(0, 900));
   }
 
-  /** تجميع الرسائل: النظام (شخصية+معرفة+سياق صفحة+قواعد أمان) ثم التاريخ ثم الرسالة */
+  /** تجميع الرسائل: النظام (شخصية+معرفة+كتالوج حي+سياق صفحة+قواعد أمان) ثم التاريخ ثم الرسالة */
   async buildMessages(ctx: ChatContext, userMessage: string): Promise<ChatMessageLite[]> {
     const knowledge = await this.retrieveKnowledge(ctx.bot.id, userMessage);
     const page = ctx.page;
+
+    // منتجات الكتالوج الحي المطابقة لرسالة الزائر — يرد البوت بالسعر والرابط الفعليين
+    let catalogBlock = '';
+    try {
+      const products = await this.catalog.searchForBot(ctx.clientId, userMessage, 5);
+      if (products.length) {
+        const lines = products.map((p) =>
+          `- ${p.name}|${p.price}|${p.currency}|${p.category}|${p.productUrl}|${p.inStock ? 'متوفر' : 'نفد'}`
+        );
+        catalogBlock =
+          `【CATALOG】منتجات حية من كتالوج المتجر مطابقة لسؤال الزائر (استخدمها في إجابتك مع السعر والرابط — لا تخترع أسعاراً):\n` +
+          lines.join('\n');
+      }
+    } catch {
+      /* الكتالوج اختياري */
+    }
+
     const systemParts = [
       ctx.bot.persona,
       page
         ? `الزائر الآن في صفحة: ${page.title || ''} (${page.path}) — اجعل ردك مناسباً لهذه الصفحة تحديداً.`
         : '',
+      catalogBlock,
       knowledge.length
         ? `معلومات موثوقة من قاعدة معرفة المتجر — استخدمها في إجابتك:\n${knowledge.join('\n\n')}`
         : '',

@@ -14,11 +14,14 @@ import { StatusController } from './controllers/status.controller.js';
 import { UsageController } from './controllers/usage.controller.js';
 import { ConversationsController } from './controllers/conversations.controller.js';
 import { LeadsController } from './controllers/leads.controller.js';
+import { CatalogController } from './controllers/catalog.controller.js';
+import { CatalogService } from './catalog.service.js';
 
 @Module({
   providers: [
     GatewayService,
     WidgetService,
+    CatalogService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
@@ -34,6 +37,7 @@ import { LeadsController } from './controllers/leads.controller.js';
     UsageController,
     ConversationsController,
     LeadsController,
+    CatalogController,
   ],
 })
 export class AppModule {}
