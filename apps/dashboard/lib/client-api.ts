@@ -13,7 +13,7 @@ const JS_COOKIE = 'cbd_tk';
 function readCookie(name: string): string | null {
   try {
     const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
-    return m ? decodeURIComponent(m[1]) : null;
+    return m && m[1] !== undefined ? decodeURIComponent(m[1]) : null;
   } catch {
     return null;
   }

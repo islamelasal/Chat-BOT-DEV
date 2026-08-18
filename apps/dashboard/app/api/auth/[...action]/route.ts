@@ -172,9 +172,9 @@ function getTokenFromRequest(req: NextRequest): string | null {
   if (xt && xt.length > 10) return xt;
   const cookie = req.headers.get('cookie') ?? '';
   const m = cookie.match(new RegExp('(?:^|; )' + COOKIE_NAME + '=([^;]*)'));
-  if (m) return decodeURIComponent(m[1]);
+  if (m && m[1] !== undefined) return decodeURIComponent(m[1]);
   const m2 = cookie.match(new RegExp('(?:^|; )' + JS_COOKIE + '=([^;]*)'));
-  return m2 ? decodeURIComponent(m2[1]) : null;
+  return m2 && m2[1] !== undefined ? decodeURIComponent(m2[1]) : null;
 }
 
 export { handler as GET, handler as POST };
