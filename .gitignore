@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Builds
+dist/
+build/
+.next/
+out/
+.turbo/
+coverage/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS/Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local infra data
+infra/data/
+infra/backups/
+
+# Prisma
+prisma/migrations/*/migration_lock.toml
