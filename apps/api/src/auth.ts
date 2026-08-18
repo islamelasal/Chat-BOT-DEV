@@ -44,6 +44,9 @@ export function verifyAuthToken(token: string): AuthUser | null {
 function extractToken(req: Request): string | null {
   const auth = req.headers.authorization;
   if (auth?.startsWith('Bearer ')) return auth.slice(7);
+  // رأس مخصص — بعض البروكسيات الوسيطة تشيل Authorization، هذا ينجو منها
+  const xt = req.headers['x-session-token'];
+  if (typeof xt === 'string' && xt.length > 10) return xt;
   const cookie = (req as any).cookies?.[AUTH_COOKIE];
   if (cookie) return cookie;
   return null;
@@ -65,7 +68,14 @@ export class JwtAuthGuard implements CanActivate {
       if (user) (req as any).user = user; // اختياري — إن وُجد
       return true;
     }
-    if (!user) throw new UnauthorizedException('انتهت الجلسة — سجل الدخول مجدداً');
+    if (!user) {
+      // سجل تشخيصي دقيق — يوضح أي قناة وصلت وأيها لم تصل
+      const bearer = Boolean(req.headers.authorization);
+      const xt = Boolean(req.headers['x-session-token']);
+      const cookie = Boolean((req as any).cookies?.[AUTH_COOKIE]);
+      console.warn(`[auth:401] ${req.method} ${req.url} | bearer:${bearer} x-session-token:${xt} cookie:${cookie}`);
+      throw new UnauthorizedException('انتهت الجلسة — سجل الدخول مجدداً');
+    }
     (req as any).user = user;
     return true;
   }

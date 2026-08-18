@@ -1,29 +1,46 @@
 'use client';
 
-/** إدارة رمز الجلسة في المتصفح — المصدر الوحيد للحقيقة في بيئة المعاينة
- *  (الكعكات قد تُحجب في الإطارات المدمجة، لذلك كل الطلبات تحمل Bearer token) */
+/** إدارة رمز الجلسة في المتصفح — 4 قنوات متوازية لضمان الوصول في أي بيئة:
+ *  1) localStorage (الرئيسي)
+ *  2) كعكة JS مقروءة cbd_tk (نجاة حتى لو قُيّد التخزين)
+ *  3) رأس Authorization القياسي
+ *  4) رأس مخصص x-session-token (ينجو من بروكسيات تشيل Authorization)
+ *  5) كعكة httpOnly (يضبطها cookie-sync — تُرسل تلقائياً) */
 
 const TOKEN_KEY = 'cbd_token';
+const JS_COOKIE = 'cbd_tk';
 
-export function getToken(): string | null {
+function readCookie(name: string): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : null;
   } catch {
     return null;
   }
+}
+
+export function getToken(): string | null {
+  try {
+    const ls = localStorage.getItem(TOKEN_KEY);
+    if (ls) return ls;
+  } catch {
+    /* التخزين غير متاح */
+  }
+  return readCookie(JS_COOKIE);
 }
 
 export function setToken(token: string): void {
   try {
     localStorage.setItem(TOKEN_KEY, token);
   } catch {
-    /* التخزين غير متاح */
+    /* تجاهل */
   }
 }
 
 export function clearToken(): void {
   try {
     localStorage.removeItem(TOKEN_KEY);
+    document.cookie = JS_COOKIE + '=; Max-Age=0; path=/';
   } catch {
     /* تجاهل */
   }
@@ -35,7 +52,7 @@ export class ClientAuthError extends Error {
   }
 }
 
-/** تجديد الجلسة برمز منتهٍ حديثاً (فترة سماح 12 ساعة) — بدون استدعاء apiClient لتجنب التكرار */
+/** تجديد الجلسة برمز منتهٍ حديثاً (فترة سماح 12 ساعة) */
 export async function refreshSession(): Promise<string | null> {
   const token = getToken();
   if (!token) return null;
@@ -46,6 +63,7 @@ export async function refreshSession(): Promise<string | null> {
       headers: {
         'content-type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'x-session-token': token,
       },
     });
     if (!res.ok) return null;
@@ -60,21 +78,22 @@ export async function refreshSession(): Promise<string | null> {
   }
 }
 
-/** استدعاء للـ API عبر نفس الأصل مع رمز الجلسة + تجديد تلقائي عند انتهائه */
+/** استدعاء للـ API عبر نفس الأصل — يرسل الرمز بكل القنوات + تجديد تلقائي عند 401 */
 export async function apiClient<T>(
   path: string,
   opts?: RequestInit & { json?: unknown }
 ): Promise<T> {
   const doFetch = async (): Promise<Response> => {
     const token = getToken();
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}`, 'x-session-token': token } : {}),
+      ...((opts?.headers as Record<string, string>) ?? {}),
+    };
     return fetch('/backend' + path, {
       method: opts?.method ?? 'GET',
       credentials: 'include',
-      headers: {
-        'content-type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(opts?.headers ?? {}),
-      },
+      headers,
       body: opts?.json !== undefined ? JSON.stringify(opts.json) : opts?.body,
       cache: 'no-store',
     });
