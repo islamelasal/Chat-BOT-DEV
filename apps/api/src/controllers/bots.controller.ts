@@ -16,7 +16,8 @@ import { botCreateSchema, knowledgeChunkSchema, routingPolicySchema } from '@cbd
 import { CurrentUser, Roles } from '../auth.js';
 import type { AuthUser } from '../auth.js';
 import { audit } from '../audit.js';
-import { crawlUrl } from '../crawl.js';
+import { crawlUrl, isPrivateUrl } from '../crawl.js';
+import { config } from '../config.js';
 
 async function botRowToBot(r: any) {
   return {
@@ -132,6 +133,15 @@ export class BotsController {
       .filter((u: string) => /^https?:\/\/[^\s]+$/.test(u))
       .slice(0, 10);
     if (!urls.length) throw new BadRequestException('أدخل رابطاً صحيحاً واحداً على الأقل (يبدأ بـ http)');
+
+    // حارس SSRF (مع DNS Pinning): منع زحف الشبكات الداخلية إلا في وضع الديمو
+    if (!config.CRAWL_ALLOW_PRIVATE) {
+      for (const u of urls) {
+        if (await isPrivateUrl(u)) {
+          throw new BadRequestException(`ممنوع زحف العناوين الداخلية: ${u}`);
+        }
+      }
+    }
 
     let added = 0;
     let skipped = 0;

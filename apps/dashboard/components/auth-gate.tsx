@@ -2,49 +2,53 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getToken, clearToken } from '@/lib/client-api';
+import { apiClient, getToken } from '@/lib/client-api';
 import '@/lib/fetch-wrapper'; // تثبيت حاقن الرمز قبل أي طلب
 
 /**
- * بوابة الدخول للوحة — تعتمد على الرمز المحفوظ في المتصفح فقط (لا كعكات):
- * - لا رمز → صفحة الدخول
- * - رمز موجود → تُعرض اللوحة فوراً (وتُزامن الكعكة في الخلفية كرفاهية)
- * هذا يلغي نهائياً حلقة "جارٍ استعادة الجلسة".
+ * بوابة الدخول — تحقق قبل العرض (Validate-Before-Render):
+ * - لا رمز → صفحة الدخول فوراً.
+ * - رمز موجود → يُتحقق منه أولاً (مع تجديد تلقائي إن كان منتهياً حديثاً)
+ *   وبعد النجاح فقط تُعرض اللوحة — فلا وميض قوائم ثم خروج أبداً.
  */
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const [state, setState] = useState<'checking' | 'ready'>('checking');
 
   useEffect(() => {
+    let cancelled = false;
     const token = getToken();
     if (!token) {
       router.replace('/login');
       return;
     }
-    // مزامنة الكعكة في الخلفية (اختيارية — لا ننتظرها ولا نعتمد عليها)
+    // تحقق فعلي من الجلسة (apiClient يجدد تلقائياً إن كانت منتهية حديثاً)
+    apiClient('/auth/me')
+      .then(() => {
+        if (!cancelled) setState('ready');
+      })
+      .catch(() => {
+        // فشل حتى بعد التجديد → جلسة منتهية فعلاً
+        if (!cancelled) router.replace('/login');
+      });
+    // مزامنة الكعكة في الخلفية (رفاهية فقط — لا تؤثر على التنقل إطلاقاً)
     fetch('/api/auth/cookie-sync', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ token }),
-    })
-      .then((r) => r.json().catch(() => null))
-      .then((j) => {
-        if (j && j.ok === false) {
-          // رمز غير صالح (منتهي/ملغى) — نظّفه وأعد الدخول
-          clearToken();
-          router.replace('/login');
-        }
-      })
-      .catch(() => {});
-    setReady(true);
+    }).catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  if (!ready) {
+  if (state === 'checking') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-300">
         <div className="text-center">
           <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-          <div className="text-sm font-bold">جارٍ فتح اللوحة...</div>
+          <div className="text-sm font-bold">جارٍ التحقق من الجلسة...</div>
         </div>
       </div>
     );

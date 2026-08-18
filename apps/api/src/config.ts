@@ -21,6 +21,10 @@ const envSchema = z.object({
   RATE_LIMIT_PER_SESSION_MIN: z.coerce.number().default(12),
   RATE_LIMIT_PER_CLIENT_HOUR: z.coerce.number().default(1000),
   RATE_LIMIT_DISABLED: z.coerce.boolean().default(false),
+  // زاحف Scrapling الجانبي (تجاوز Cloudflare) — فارغ = استخدام الزاحف المدمج فقط
+  SCRAPLING_URL: z.string().optional().default(''),
+  // SSRF: السماح بزحف العناوين الخاصة (true في الديمو للاختبار المحلي — false في الإنتاج)
+  CRAWL_ALLOW_PRIVATE: z.coerce.boolean().default(true),
 });
 
 const parsed = envSchema.safeParse(process.env);

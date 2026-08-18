@@ -47,6 +47,8 @@ services:
       DEMO_MODE: 'false'
       WIDGET_DIST: /app/widget-dist
       CORS_ORIGINS: ${CORS_ORIGINS:-https://app.chatbotdev.app}
+      SCRAPLING_URL: ${SCRAPLING_URL:-http://scrapling:4100}
+      CRAWL_ALLOW_PRIVATE: 'false'
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     depends_on:
@@ -54,6 +56,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # زاحف Scrapling الجانبي — تجاوز Cloudflare عند تدريب البوتات من روابط
+  # (اختياري: يُشغَّل بـ --profile scrapling — العقدة تعمل بدونه عبر الزاحف المدمج)
+  scrapling:
+    build:
+      context: ../services/scrapling-crawler
+    restart: always
+    profiles: ['scrapling']
+    expose:
+      - '4100'
 
   worker:
     build:

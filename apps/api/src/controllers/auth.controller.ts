@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Res, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Res, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import type { Response } from 'express';
 import { db, now } from '@cbd/db';
 import { verifyPassword } from '../crypto.js';
@@ -88,11 +88,39 @@ export class AuthController {
     return { user };
   }
 
+  /**
+   * تجديد الجلسة مع فترة سماح (Sliding Session) — المعيار الاحترافي لحل الخروج المفاجئ:
+   * - الرموز المنتهية حديثاً (خلال 12 ساعة) تُجدَّد تلقائياً برمز جديد 15 دقيقة.
+   * - التوقيع يُتحقق دائماً (حتى للرمز المنتهي) فلا يمكن تزوير التجديد.
+   * - الدور والصلاحيات تُقرأ من قاعدة البيانات عند كل تجديد (تسري الإيقافات فوراً).
+   */
+  @Public()
   @Post('refresh')
-  refresh(@CurrentUser() user: AuthUser, @Res({ passthrough: true }) res: Response) {
-    const token = signAuthToken(user);
-    res.cookie(AUTH_COOKIE, token, cookieOptions());
-    return { user, token };
+  async refresh(@Headers('authorization') auth: string | undefined, @Res({ passthrough: true }) res: Response) {
+    const token = auth?.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+    if (!token) throw new UnauthorizedException('رمز غير موجود');
+    let payload: any;
+    try {
+      payload = jwtService.verify(token, { ignoreExpiration: true });
+    } catch {
+      throw new UnauthorizedException('رمز غير صالح');
+    }
+    const GRACE_MS = 12 * 3600_000;
+    if (typeof payload?.exp !== 'number' || Date.now() > payload.exp * 1000 + GRACE_MS) {
+      throw new UnauthorizedException('انتهت الجلسة — سجل الدخول مجدداً');
+    }
+    const user = await db.get('SELECT * FROM users WHERE id = ? AND active = 1', payload.sub) as any;
+    if (!user) throw new UnauthorizedException('المستخدم غير موجود');
+    const authUser: AuthUser = {
+      id: String(user.id),
+      email: String(user.email),
+      name: String(user.name),
+      role: String(user.role) as AuthUser['role'],
+    };
+    const newToken = signAuthToken(authUser);
+    res.cookie(AUTH_COOKIE, newToken, cookieOptions());
+    audit({ userId: authUser.id, action: 'session.refresh', entity: 'auth' });
+    return { user: authUser, token: newToken };
   }
 
   @Post('logout')

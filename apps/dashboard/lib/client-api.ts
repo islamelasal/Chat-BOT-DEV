@@ -35,23 +35,59 @@ export class ClientAuthError extends Error {
   }
 }
 
-/** استدعاء للـ API عبر نفس الأصل مع رمز الجلسة — بدون أي اعتماد على الكعكات */
+/** تجديد الجلسة برمز منتهٍ حديثاً (فترة سماح 12 ساعة) — بدون استدعاء apiClient لتجنب التكرار */
+export async function refreshSession(): Promise<string | null> {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const res = await fetch('/backend/auth/refresh', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'content-type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) return null;
+    const j = (await res.json().catch(() => null)) as { token?: string } | null;
+    if (j?.token) {
+      setToken(j.token);
+      return j.token;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** استدعاء للـ API عبر نفس الأصل مع رمز الجلسة + تجديد تلقائي عند انتهائه */
 export async function apiClient<T>(
   path: string,
   opts?: RequestInit & { json?: unknown }
 ): Promise<T> {
-  const token = getToken();
-  const res = await fetch('/backend' + path, {
-    method: opts?.method ?? 'GET',
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts?.headers ?? {}),
-    },
-    body: opts?.json !== undefined ? JSON.stringify(opts.json) : opts?.body,
-    cache: 'no-store',
-  });
+  const doFetch = async (): Promise<Response> => {
+    const token = getToken();
+    return fetch('/backend' + path, {
+      method: opts?.method ?? 'GET',
+      credentials: 'include',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(opts?.headers ?? {}),
+      },
+      body: opts?.json !== undefined ? JSON.stringify(opts.json) : opts?.body,
+      cache: 'no-store',
+    });
+  };
+
+  let res = await doFetch();
+  if (res.status === 401) {
+    // جلسة منتهية → تجديد تلقائي ثم إعادة المحاولة مرة واحدة
+    const renewed = await refreshSession();
+    if (renewed) {
+      res = await doFetch();
+    }
+  }
   if (res.status === 401) {
     clearToken();
     if (typeof window !== 'undefined') window.location.href = '/login';
