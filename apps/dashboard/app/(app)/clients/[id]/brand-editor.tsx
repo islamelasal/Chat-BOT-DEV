@@ -1,7 +1,65 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, Card, CardHeader, Field, Input } from '@/components/ui';
+
+/** استخراج الألوان المهيمنة من صورة (canvas) — quantization بسيط مع تجميع */
+function extractPalette(img: HTMLImageElement, count = 6): Array<{ hex: string; weight: number }> {
+  const size = 120;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, 0, 0, size, size);
+  const { data } = ctx.getImageData(0, 0, size, size);
+
+  // تجميع الألوان في دلاء 24×24×24 مع ترجيح المسافة عن المركز
+  const buckets = new Map<string, { r: number; g: number; b: number; n: number }>();
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3]!;
+    if (a < 200) continue; // نتجاهل الشفاف
+    const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+    // تجاهل القريب من الأبيض/الأسود (خلفيات)
+    if ((r > 235 && g > 235 && b > 235) || (r < 20 && g < 20 && b < 20)) continue;
+    const key = `${r >> 4},${g >> 4},${b >> 4}`;
+    const bucket = buckets.get(key) ?? { r: 0, g: 0, b: 0, n: 0 };
+    bucket.r += r; bucket.g += g; bucket.b += b; bucket.n++;
+    buckets.set(key, bucket);
+  }
+
+  const palette = [...buckets.values()]
+    .map((b) => ({
+      hex: `#${[b.r, b.g, b.b].map((v) => Math.round(v / b.n).toString(16).padStart(2, '0')).join('')}`.toUpperCase(),
+      weight: b.n,
+    }))
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, count);
+
+  return palette;
+}
+
+/** اختيار ألوان متناغمة: الأكثر شيوعاً كرئيسي، الأبعد عنه كثانوي */
+function pickBrandColors(palette: Array<{ hex: string; weight: number }>) {
+  if (palette.length === 0) return null;
+  const primary = palette[0]!;
+  let secondary = palette[0]!;
+  let bestDistance = -1;
+  for (const p of palette.slice(1)) {
+    const r1 = parseInt(primary.hex.slice(1, 3), 16), g1 = parseInt(primary.hex.slice(3, 5), 16), b1 = parseInt(primary.hex.slice(5, 7), 16);
+    const r2 = parseInt(p.hex.slice(1, 3), 16), g2 = parseInt(p.hex.slice(3, 5), 16), b2 = parseInt(p.hex.slice(5, 7), 16);
+    const dist = Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
+    if (dist > bestDistance && dist > 120) {
+      bestDistance = dist;
+      secondary = p;
+    }
+  }
+  // لون تمييز أغمق من الرئيسي
+  const r = Math.max(0, parseInt(primary.hex.slice(1, 3), 16) - 55);
+  const g = Math.max(0, parseInt(primary.hex.slice(3, 5), 16) - 55);
+  const b = Math.max(0, parseInt(primary.hex.slice(5, 7), 16) - 55);
+  const accent = `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+  return { primary: primary.hex, secondary: secondary.hex, accent };
+}
 
 export default function BrandEditor({ client }: { client: any }) {
   const [logoUrl, setLogoUrl] = useState(client.brand?.logoUrl ?? '');
@@ -11,6 +69,31 @@ export default function BrandEditor({ client }: { client: any }) {
   const [font, setFont] = useState(client.brand?.font ?? 'Cairo');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [palette, setPalette] = useState<Array<{ hex: string; weight: number }> | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(client.brand?.logoUrl ?? null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      const img = new Image();
+      img.onload = () => {
+        const pal = extractPalette(img);
+        setPalette(pal);
+        const picked = pickBrandColors(pal);
+        if (picked) {
+          setPrimary(picked.primary);
+          setSecondary(picked.secondary);
+          setAccent(picked.accent);
+        }
+        setLogoPreview(dataUrl);
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const save = async () => {
     setBusy(true);
@@ -21,7 +104,7 @@ export default function BrandEditor({ client }: { client: any }) {
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          logoUrl: logoUrl || null,
+          logoUrl: logoPreview ?? null,
           colors: { primary, secondary, accent },
           font,
         }),
@@ -37,16 +120,51 @@ export default function BrandEditor({ client }: { client: any }) {
 
   return (
     <Card>
-      <CardHeader title="الهوية البصرية (Brand Kit)" subtitle="ألوان البوت تتبع هوية العميل — تُستخدم في الفقاعة ورأس المحادثة" />
+      <CardHeader
+        title="الهوية البصرية (Brand Kit)"
+        subtitle="ارفع لوجو العميل وسيُستخرج الرئيسي والثانوي تلقائياً — أو عدّل يدوياً"
+      />
       <div className="space-y-4 p-5">
-        <div className="flex items-center gap-4">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl text-lg font-extrabold text-white" style={{ background: primary }}>
-            {logoUrl ? <img src={logoUrl} className="h-full w-full object-cover" alt="" /> : String(client.name).slice(0, 2)}
+        {/* منطقة رفع اللوجو */}
+        <div className="flex items-center gap-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white text-xl font-extrabold text-white shadow-sm" style={{ background: primary }}>
+            {logoPreview ? <img src={logoPreview} className="h-full w-full object-contain" alt="لوجو العميل" /> : String(client.name).slice(0, 2)}
           </span>
-          <Field label="رابط اللوجو (اختياري)">
-            <Input dir="ltr" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://..." />
-          </Field>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-extrabold text-slate-700">لوجو العميل</div>
+            <p className="mt-0.5 text-[11px] text-slate-500">PNG/JPG/WebP — الأفضل بشفافية (PNG). يُحفظ كـ Data URL في الديمو.</p>
+            <div className="mt-2 flex gap-2">
+              <Button variant="outline" type="button" onClick={() => fileRef.current?.click()}>📤 رفع اللوجو</Button>
+              {logoPreview && (
+                <Button variant="ghost" type="button" onClick={() => { setLogoPreview(null); setPalette(null); }}>إزالة</Button>
+              )}
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+          </div>
         </div>
+
+        {/* الألوان المستخرجة */}
+        {palette && palette.length > 0 && (
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-extrabold text-emerald-800">🎨 الألوان المستخرجة من اللوجو</span>
+              <span className="text-[10px] text-emerald-600">اضغط أي لون لتطبيقه كرئيسي</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {palette.map((p) => (
+                <button
+                  key={p.hex}
+                  type="button"
+                  title={`${p.hex} — ${Math.round((p.weight / palette.reduce((a, x) => a + x.weight, 0)) * 100)}%`}
+                  onClick={() => setPrimary(p.hex)}
+                  className="h-9 w-9 rounded-lg border-2 border-white shadow transition hover:scale-110"
+                  style={{ background: p.hex }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-4">
           <Field label="اللون الرئيسي">
             <div className="flex items-center gap-2">
@@ -72,7 +190,7 @@ export default function BrandEditor({ client }: { client: any }) {
         </Field>
         <div className="flex items-center gap-3">
           <Button onClick={save} disabled={busy}>{busy ? 'جارٍ الحفظ...' : 'حفظ الهوية'}</Button>
-          {saved && <span className="text-xs font-bold text-emerald-600">✓ تم الحفظ</span>}
+          {saved && <span className="text-xs font-bold text-emerald-600">✓ تم الحفظ — الثيم والودجت يتحدثان تلقائياً</span>}
         </div>
       </div>
     </Card>
