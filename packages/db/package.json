@@ -1,0 +1,34 @@
+{
+  "name": "@cbd/db",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./seed": {
+      "types": "./dist/seed.d.ts",
+      "default": "./dist/seed.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && cp src/schema.sql dist/schema.sql",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cbd/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "pg": "^8.13.1",
+    "@types/pg": "^8.11.10",
+    "ioredis": "^5.4.2"
+  },
+  "type": "commonjs"
+}

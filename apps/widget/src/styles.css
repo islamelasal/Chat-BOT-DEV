@@ -1,0 +1,290 @@
+:root {
+  --cbd-primary: #0f766e;
+  --cbd-secondary: #f59e0b;
+  --cbd-bg: #ffffff;
+  --cbd-header-text: #ffffff;
+  --cbd-font: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+#cbd-widget-app {
+  height: 100vh;
+}
+
+.cbd-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-family: var(--cbd-font);
+  background: var(--cbd-bg);
+  direction: rtl;
+}
+
+/* ─── الرأس ─── */
+.cbd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, var(--cbd-primary), color-mix(in srgb, var(--cbd-primary) 78%, #000));
+  color: var(--cbd-header-text);
+  flex-shrink: 0;
+}
+
+.cbd-header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cbd-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #fff;
+}
+
+.cbd-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.cbd-title {
+  font-weight: 800;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cbd-status {
+  font-size: 11px;
+  opacity: 0.9;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cbd-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: cbd-pulse 1.6s ease infinite;
+}
+
+@keyframes cbd-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.cbd-close {
+  background: rgba(255, 255, 255, 0.14);
+  border: none;
+  color: var(--cbd-header-text);
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cbd-close:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* ─── الرسائل ─── */
+.cbd-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 14px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: color-mix(in srgb, var(--cbd-bg) 94%, #e5e7eb);
+}
+
+.cbd-row {
+  display: flex;
+}
+
+.cbd-row.user {
+  justify-content: flex-start;
+  flex-direction: row-reverse;
+}
+
+.cbd-bubble {
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.cbd-row.bot .cbd-bubble {
+  background: #fff;
+  color: #1f2937;
+  border-start-start-radius: 4px;
+}
+
+.cbd-row.user .cbd-bubble {
+  background: var(--cbd-primary);
+  color: #fff;
+  border-start-end-radius: 4px;
+}
+
+.cbd-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  background: currentColor;
+  margin-inline-start: 2px;
+  vertical-align: text-bottom;
+  animation: cbd-blink 0.9s step-start infinite;
+}
+
+@keyframes cbd-blink {
+  50% { opacity: 0; }
+}
+
+.cbd-feedback {
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+}
+
+.cbd-feedback button {
+  border: none;
+  background: #f3f4f6;
+  border-radius: 8px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.cbd-feedback button.active {
+  background: #dcfce7;
+  opacity: 1;
+}
+
+/* ─── الاقتراحات ─── */
+.cbd-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 14px;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--cbd-bg) 94%, #e5e7eb);
+}
+
+.cbd-chip {
+  border: 1px solid color-mix(in srgb, var(--cbd-primary) 35%, #e5e7eb);
+  background: #fff;
+  color: var(--cbd-primary);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cbd-chip:hover {
+  background: color-mix(in srgb, var(--cbd-primary) 8%, #fff);
+}
+
+/* ─── الخطأ ─── */
+.cbd-error {
+  margin: 0 14px 8px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+
+/* ─── الإدخال ─── */
+.cbd-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid #f0f0f0;
+  flex-shrink: 0;
+  background: var(--cbd-bg);
+}
+
+.cbd-input {
+  flex: 1;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.cbd-input:focus {
+  border-color: var(--cbd-primary);
+}
+
+.cbd-send {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: none;
+  background: var(--cbd-primary);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s, opacity 0.12s;
+}
+
+.cbd-send:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.cbd-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cbd-powered {
+  text-align: center;
+  font-size: 10px;
+  color: #9ca3af;
+  padding: 4px 0 8px;
+  background: var(--cbd-bg);
+  flex-shrink: 0;
+}

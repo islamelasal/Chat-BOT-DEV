@@ -1,0 +1,23 @@
+# Chat Bot Dev — صورة الـ API والعامل (نفس الصورة، أمران)
+FROM node:22-alpine AS build
+WORKDIR /repo
+RUN corepack enable
+COPY package.json pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY packages ./packages
+COPY apps/api ./apps/api
+COPY apps/widget ./apps/widget
+RUN pnpm install --frozen-lockfile --ignore-scripts && \
+    pnpm --filter '@cbd/shared' --filter '@cbd/db' --filter '@cbd/gateway' --filter '@cbd/worker-core' build && \
+    pnpm --filter '@cbd/widget' build && \
+    pnpm --filter '@cbd/api' build
+
+FROM node:22-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build /repo/node_modules ./node_modules
+COPY --from=build /repo/packages ./packages
+COPY --from=build /repo/apps/api/dist ./dist
+COPY --from=build /repo/apps/api/package.json ./package.json
+COPY --from=build /repo/apps/widget/dist ./widget-dist
+EXPOSE 4000
+CMD ["node", "dist/main.js"]

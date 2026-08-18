@@ -35,3 +35,7 @@ infra/backups/
 
 # Prisma
 prisma/migrations/*/migration_lock.toml
+apps/api/data/
+*.db-wal
+*.db-shm
+/data/

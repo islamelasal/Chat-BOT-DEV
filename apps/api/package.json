@@ -1,0 +1,38 @@
+{
+  "name": "@cbd/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build && node -e \"fs.cpSync('public','dist/public',{recursive:true})\"",
+    "start": "node dist/main.js",
+    "start:worker": "node dist/worker-main.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "seed": "tsx src/seed-run.ts"
+  },
+  "dependencies": {
+    "@cbd/db": "workspace:*",
+    "@cbd/gateway": "workspace:*",
+    "@cbd/shared": "workspace:*",
+    "@cbd/worker-core": "workspace:*",
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.1",
+    "cors": "^2.8.5",
+    "express": "^5.0.1",
+    "helmet": "^8.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "type": "commonjs"
+}

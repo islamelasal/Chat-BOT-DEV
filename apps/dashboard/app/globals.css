@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  --cbd-font: 'Segoe UI', 'Cairo', Tahoma, 'Noto Naskh Arabic', sans-serif;
+}
+
+html {
+  direction: rtl;
+}
+
+body {
+  font-family: var(--cbd-font);
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+* {
+  border-color: #e2e8f0;
+}
+
+/* شريط تمرير أنيق */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* مؤشر كتابة */
+@keyframes cbd-pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.cbd-live-dot {
+  animation: cbd-pulse-dot 1.6s ease infinite;
+}

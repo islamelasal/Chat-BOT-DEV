@@ -1,0 +1,117 @@
+# Chat Bot Dev — بنية الإنتاج (المرحلة الأولى: VPS واحد)
+# الترقية للمرحلة الثانية: فصل Postgres/Redis لخوادم مدارة + عقدتي API.
+name: chat-bot-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: chatbotdev
+      POSTGRES_USER: chatbotdev
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?ضع كلمة مرور قاعدة البيانات في .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U chatbotdev']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgres://chatbotdev:${DB_PASSWORD}@postgres:5432/chatbotdev
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SEED_DEMO: ${SEED_DEMO:-false}
+      WORKER_IN_PROCESS: 'false'
+      DEMO_MODE: 'false'
+      WIDGET_DIST: /app/widget-dist
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://app.chatbotdev.app}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    restart: always
+    command: node dist/worker-main.js
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://chatbotdev:${DB_PASSWORD}@postgres:5432/chatbotdev
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      RETENTION_DAYS: '90'
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.dashboard
+    restart: always
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api:4000
+    depends_on:
+      - api
+
+  traefik:
+    image: traefik:v3
+    restart: always
+    command:
+      - '--providers.docker=true'
+      - '--providers.docker.exposedbydefault=false'
+      - '--entrypoints.web.address=:80'
+      - '--entrypoints.websecure.address=:443'
+      - '--certificatesresolvers.le.acme.tlschallenge=true'
+      - '--certificatesresolvers.le.acme.email=${ACME_EMAIL}'
+      - '--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json'
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+      - 'letsencrypt:/letsencrypt'
+    labels:
+      - 'traefik.enable=true'
+
+volumes:
+  pgdata:
+  redisdata:
+  letsencrypt:
+
+networks:
+  default:
+    name: chatbotdev
