@@ -172,3 +172,18 @@ CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_events (created_at);
 CREATE INDEX IF NOT EXISTS idx_usage_client ON usage_events (client_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs (created_at);
 CREATE INDEX IF NOT EXISTS idx_alerts_created ON alerts (created_at);
+
+CREATE TABLE IF NOT EXISTS leads (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  bot_id TEXT NOT NULL,
+  conversation_id TEXT,
+  name TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL DEFAULT '',
+  page_path TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_leads_client ON leads (client_id, created_at);

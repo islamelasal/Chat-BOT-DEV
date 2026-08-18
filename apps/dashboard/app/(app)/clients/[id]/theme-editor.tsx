@@ -7,6 +7,7 @@ const DEFAULT_THEME = {
   primary: '#C1272D', secondary: '#F2A93B', background: '#FFFFFF', bubbleText: 'أهلاً! محتاج مساعدة؟',
   headerText: '#FFFFFF', font: 'Cairo', position: 'bottom-left', bubbleStyle: 'pill', windowMode: 'docked',
   welcomeTitle: '', welcomeText: '', suggestions: [], showBrand: true, logoUrl: null, poweredBy: true,
+  leadEnabled: true, leadTitle: 'سيب بياناتك وهنتواصل معاك 👋', leadButton: '📞 اطلب التواصل معاك', leadAskPhone: true,
 };
 
 export default function ThemeEditor({ client }: { client: any }) {
@@ -84,6 +85,34 @@ export default function ThemeEditor({ client }: { client: any }) {
         <Field label="اقتراحات سريعة" hint="سطر لكل اقتراح (حتى 6)">
           <Textarea rows={3} value={suggestions} onChange={(e) => setSuggestions(e.target.value)} placeholder={'سياسة الشحن والاسترجاع\nفروعنا ومواعيد العمل'} />
         </Field>
+        {/* إعدادات جمع بيانات العملاء المحتملين */}
+        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-extrabold text-slate-700">📞 جمع بيانات العملاء المحتملين (Lead Capture)</div>
+              <div className="text-[10px] text-slate-400">زر داخل المحادثة يجمع الاسم والبريد والتليفون</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => set('leadEnabled', !form.leadEnabled)}
+              className={`relative h-5 w-9 rounded-full transition ${form.leadEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+            >
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${form.leadEnabled ? 'right-0.5' : 'right-4'}`} />
+            </button>
+          </div>
+          {form.leadEnabled && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="عنوان النموذج"><Input value={form.leadTitle} onChange={(e) => set('leadTitle', e.target.value)} /></Field>
+              <Field label="نص الزر"><Input value={form.leadButton} onChange={(e) => set('leadButton', e.target.value)} /></Field>
+              <Field label="طلب التليفون">
+                <Select value={String(form.leadAskPhone)} onChange={(e) => set('leadAskPhone', e.target.value === 'true')}>
+                  <option value="true">نعم</option>
+                  <option value="false">لا</option>
+                </Select>
+              </Field>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <Button onClick={save} disabled={busy}>{busy ? 'جارٍ الحفظ...' : 'حفظ الثيم'}</Button>
           {saved && <span className="text-xs font-bold text-emerald-600">✓ تم الحفظ — المعاينة جاهزة</span>}

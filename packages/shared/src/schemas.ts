@@ -48,6 +48,10 @@ export const themeUpdateSchema = z.object({
   showBrand: z.boolean(),
   logoUrl: z.string().url().nullable(),
   poweredBy: z.boolean(),
+  leadEnabled: z.boolean().optional().default(true),
+  leadTitle: z.string().max(120).optional().default('سيب بياناتك وهنتواصل معاك'),
+  leadButton: z.string().max(60).optional().default('📞 اطلب التواصل معاك'),
+  leadAskPhone: z.boolean().optional().default(true),
 });
 
 export const botCreateSchema = z.object({
@@ -121,6 +125,14 @@ export const feedbackSchema = z.object({
   conversationId: z.string().min(3),
   messageId: z.string().min(3),
   feedback: z.enum(['up', 'down']),
+});
+
+export const leadSchema = z.object({
+  sessionToken: z.string().min(10),
+  name: z.string().min(2).max(100),
+  email: z.string().email().max(190),
+  phone: z.string().max(30).optional().default(''),
+  message: z.string().max(1000).optional().default(''),
 });
 
 export const playgroundSchema = z.object({

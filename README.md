@@ -33,6 +33,8 @@ API_INTERNAL_URL=http://127.0.0.1:4000 npx next start -p 3000
 
 **صفحة حالة الـ API:** `http://localhost:4000/` (بدل شاشة بيضاء — حالة حية + تجربة فورية لبوت الشوا)
 
+**جمع بيانات العملاء المحتملين (Lead Capture):** زر «📞 اطلب التواصل معاك» داخل بوت الشوا → صفحة `/leads` + تصدير CSV
+
 **معاينة بوت الشوا:** `http://localhost:3000/demo-store` (متجر يحاكي موقع العميل والودجت الفعلي)
 
 **الإنتاج:** `infra/docker-compose.yml` (Postgres + Redis + API + Worker مستقل + Dashboard + Traefik/HTTPS).
@@ -48,6 +50,7 @@ API_INTERNAL_URL=http://127.0.0.1:4000 npx next start -p 3000
 | [🗺️ خطة العمل](./docs/ROADMAP.md) | 6 مراحل — التقدم الحالي لكل مرحلة |
 | [🔌 كتالوج المزودين](./docs/PROVIDERS.md) | 30+ مزوداً بعناوين دقيقة + وضع الاقتصاد |
 | [👤 عميل الشوا](./docs/CLIENTS/elshawwa.md) | الشخصية، المعرفة، خطة CS-Cart/Unitheme2 |
+| [🔬 البحث التنافسي](./docs/COMPETITIVE_RESEARCH.md) | 15+ منصة منافسة: الأسعار، الميزات، التقنيات، خطة التفوّق |
 
 ## 🧰 المكدس المنفَّذ
 

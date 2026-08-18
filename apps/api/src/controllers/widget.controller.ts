@@ -21,7 +21,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { db, json, now } from '@cbd/db';
-import { chatRequestSchema, feedbackSchema } from '@cbd/shared';
+import { chatRequestSchema, feedbackSchema, leadSchema } from '@cbd/shared';
 import { Public } from '../auth.js';
 import { GatewayService } from '../gateway.service.js';
 import { WidgetService } from '../widget.service.js';
@@ -187,6 +187,30 @@ export class WidgetController {
       await result.finalize();
       if (!res.writableEnded) res.end();
     }
+  }
+
+  @Post('lead')
+  async lead(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Headers('origin') origin: string | undefined
+  ) {
+    const parsed = leadSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('بيانات غير صالحة');
+    const { sessionToken, name, email, phone, message } = parsed.data;
+    const sess = this.widgets.verify(sessionToken);
+    if (!sess) throw new ForbiddenException('الجلسة منتهية — أعد تحميل البوت');
+    if (!(await this.widgets.isOriginAllowed(sess.cid, origin))) {
+      throw new ForbiddenException('هذا النطاق غير مسموح له باستخدام البوت');
+    }
+    const ip = (req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip ?? 'unknown').trim();
+    if (!(await this.widgets.rateLimit(ip, sess.cid, sess.vid))) {
+      throw new HttpException('طلبات كثيرة جداً — حاول بعد قليل', 429);
+    }
+    const page = req.body?.page ?? undefined;
+    const result = await this.widgets.saveLead(sess, { name, email, phone, message }, page);
+    audit({ action: 'widget.lead_captured', entity: 'widget', entityId: sess.cid, meta: { email } });
+    return { ok: true, id: result.id };
   }
 
   @Post('feedback')

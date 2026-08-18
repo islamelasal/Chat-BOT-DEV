@@ -41,6 +41,10 @@ const ELSHAWWA_THEME: ThemeConfig = {
   showBrand: true,
   logoUrl: 'https://elshawwa.com/images/logos/8/elshawwa.png',
   poweredBy: true,
+  leadEnabled: true,
+  leadTitle: 'سيب بياناتك وهنتواصل معاك 👋',
+  leadButton: '📞 اطلب التواصل معاك',
+  leadAskPhone: true,
 };
 
 const ELSHAWWA_KNOWLEDGE = [

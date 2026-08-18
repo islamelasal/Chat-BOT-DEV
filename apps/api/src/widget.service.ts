@@ -173,6 +173,17 @@ export class WidgetService {
     return message;
   }
 
+  async saveLead(sess: WidgetSession, lead: { name: string; email: string; phone: string; message: string }, page?: PageContext): Promise<{ id: string }> {
+    const leadId = id('ld_');
+    await db.run(
+      `INSERT INTO leads (id, client_id, bot_id, conversation_id, name, email, phone, message, page_path, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      leadId, sess.cid, sess.bid, sess.sid, lead.name, lead.email, lead.phone, lead.message,
+      page?.path ?? null, now()
+    );
+    return { id: leadId };
+  }
+
   async setFeedback(conversationId: string, messageId: string, feedback: 'up' | 'down'): Promise<boolean> {
     const row = await db.get('SELECT * FROM conversations WHERE id = ?', conversationId) as any;
     if (!row) return false;

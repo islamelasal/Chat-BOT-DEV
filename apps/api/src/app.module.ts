@@ -13,6 +13,7 @@ import { WidgetController } from './controllers/widget.controller.js';
 import { StatusController } from './controllers/status.controller.js';
 import { UsageController } from './controllers/usage.controller.js';
 import { ConversationsController } from './controllers/conversations.controller.js';
+import { LeadsController } from './controllers/leads.controller.js';
 
 @Module({
   providers: [
@@ -32,6 +33,7 @@ import { ConversationsController } from './controllers/conversations.controller.
     StatusController,
     UsageController,
     ConversationsController,
+    LeadsController,
   ],
 })
 export class AppModule {}

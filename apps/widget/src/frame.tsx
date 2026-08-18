@@ -30,6 +30,10 @@ interface Theme {
   showBrand: boolean;
   logoUrl: string | null;
   poweredBy: boolean;
+  leadEnabled?: boolean;
+  leadTitle?: string;
+  leadButton?: string;
+  leadAskPhone?: boolean;
 }
 
 interface Msg {
@@ -92,6 +96,11 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [logoFailed, setLogoFailed] = useState(false);
+  const [leadOpen, setLeadOpen] = useState(false);
+  const [leadForm, setLeadForm] = useState({ name: '', email: '', phone: '' });
+  const [leadSent, setLeadSent] = useState(false);
+  const [leadBusy, setLeadBusy] = useState(false);
+  const [leadError, setLeadError] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -129,6 +138,7 @@ function App() {
     primary: '#0F766E', secondary: '#F59E0B', background: '#FFFFFF', bubbleText: '', headerText: '#FFFFFF',
     font: 'Cairo', position: 'bottom-left', bubbleStyle: 'pill', windowMode: 'docked',
     welcomeTitle: 'المساعد الذكي', welcomeText: '', suggestions: [], showBrand: true, logoUrl: null, poweredBy: true,
+    leadEnabled: true, leadTitle: 'سيب بياناتك وهنتواصل معاك', leadButton: '📞 اطلب التواصل معاك', leadAskPhone: true,
   };
 
   const cssVars: Record<string, string> = {
@@ -225,6 +235,41 @@ function App() {
 
   const close = () => window.parent.postMessage({ source: 'cbd-widget', type: 'close' }, '*');
 
+  async function submitLead() {
+    if (!cfg || leadBusy) return;
+    if (!leadForm.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadForm.email.trim())) {
+      setLeadError('اكتب اسمك وبريد صحيح من فضلك');
+      return;
+    }
+    setLeadBusy(true);
+    setLeadError('');
+    try {
+      const token = sessionToken ?? (await ensureSession(cfg.botId));
+      if (!token) throw new Error('تعذر إنشاء جلسة');
+      const res = await fetch(API + '/w/lead', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sessionToken: token,
+          name: leadForm.name.trim(),
+          email: leadForm.email.trim(),
+          phone: leadForm.phone.trim(),
+          message: '',
+        }),
+      });
+      if (!res.ok) throw new Error('تعذر حفظ البيانات');
+      setLeadSent(true);
+      setMessages((m) => [
+        ...m,
+        { id: 'lead_' + Date.now(), role: 'assistant', content: 'تمام يا ' + leadForm.name.trim() + ' 👌\n\nوصلتنا بياناتك وهنتواصل معاك في أقرب وقت. لو محتاج حاجة عاجلة: 16959.', feedback: null },
+      ]);
+    } catch (err) {
+      setLeadError((err as Error).message);
+    } finally {
+      setLeadBusy(false);
+    }
+  }
+
   return (
     <div className="cbd-app" style={cssVars} dir="rtl">
       <header className="cbd-header">
@@ -264,11 +309,57 @@ function App() {
         ))}
       </div>
 
-      {theme.suggestions?.length > 0 && messages.length <= 1 && (
+      {theme.suggestions?.length > 0 && messages.length <= 1 && !leadOpen && (
         <div className="cbd-suggestions">
           {theme.suggestions.map((s) => (
             <button key={s} className="cbd-chip" onClick={() => send(s)}>{s}</button>
           ))}
+        </div>
+      )}
+
+      {/* جمع بيانات العميل المحتمل (Lead Capture) */}
+      {theme.leadEnabled && !leadSent && (
+        <div className="cbd-lead">
+          {!leadOpen ? (
+            <button className="cbd-lead-btn" onClick={() => setLeadOpen(true)}>
+              {theme.leadButton ?? '📞 اطلب التواصل معاك'}
+            </button>
+          ) : (
+            <div className="cbd-lead-form">
+              <div className="cbd-lead-title">{theme.leadTitle ?? 'سيب بياناتك وهنتواصل معاك'}</div>
+              <input
+                className="cbd-input"
+                placeholder="اسمك"
+                value={leadForm.name}
+                onInput={(e) => setLeadForm({ ...leadForm, name: (e.target as HTMLInputElement).value })}
+              />
+              <input
+                className="cbd-input"
+                type="email"
+                dir="ltr"
+                placeholder="البريد الإلكتروني"
+                value={leadForm.email}
+                onInput={(e) => setLeadForm({ ...leadForm, email: (e.target as HTMLInputElement).value })}
+              />
+              {theme.leadAskPhone && (
+                <input
+                  className="cbd-input"
+                  type="tel"
+                  dir="ltr"
+                  placeholder="رقم التليفون (اختياري)"
+                  value={leadForm.phone}
+                  onInput={(e) => setLeadForm({ ...leadForm, phone: (e.target as HTMLInputElement).value })}
+                />
+              )}
+              {leadError && <div className="cbd-error">{leadError}</div>}
+              <div className="cbd-lead-actions">
+                <button className="cbd-send" style={{ width: '100%' }} onClick={() => void submitLead()} disabled={leadBusy}>
+                  {leadBusy ? '...' : 'إرسال ✓'}
+                </button>
+                <button className="cbd-lead-cancel" onClick={() => setLeadOpen(false)}>إلغاء</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

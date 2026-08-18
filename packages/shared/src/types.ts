@@ -25,6 +25,10 @@ export interface ThemeConfig {
   showBrand: boolean;
   logoUrl: string | null;
   poweredBy: boolean;     // "مدعوم من Chat Bot Dev"
+  leadEnabled: boolean;   // جمع بيانات العملاء المحتملين
+  leadTitle: string;      // عنوان نموذج البيانات
+  leadButton: string;     // نص زر فتح النموذج
+  leadAskPhone: boolean;  // طلب التليفون أيضاً
 }
 
 export interface BrandKit {
