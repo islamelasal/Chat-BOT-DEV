@@ -39,3 +39,4 @@ apps/api/data/
 *.db-wal
 *.db-shm
 /data/
+.github/workflows/
