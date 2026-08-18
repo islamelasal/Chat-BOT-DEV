@@ -91,6 +91,7 @@ function App() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [logoFailed, setLogoFailed] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -228,7 +229,17 @@ function App() {
     <div className="cbd-app" style={cssVars} dir="rtl">
       <header className="cbd-header">
         <div className="cbd-header-info">
-          {theme.logoUrl ? <img className="cbd-logo" src={theme.logoUrl} alt="" /> : <span className="cbd-avatar">💬</span>}
+          {theme.logoUrl && !logoFailed ? (
+            <img
+              className="cbd-logo"
+              src={theme.logoUrl}
+              alt=""
+              referrerPolicy="no-referrer"
+              onError={() => setLogoFailed(true)}
+            />
+          ) : (
+            <span className="cbd-avatar">💬</span>
+          )}
           <div>
             <div className="cbd-title">{theme.welcomeTitle || cfg?.clientName || 'المساعد الذكي'}</div>
             <div className="cbd-status"><span className="cbd-dot" /> متصل الآن</div>

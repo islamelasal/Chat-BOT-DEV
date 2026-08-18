@@ -39,7 +39,7 @@ const ELSHAWWA_THEME: ThemeConfig = {
   welcomeText: 'أهلاً بيك في الشوا! إزاي نقدر نساعدك النهاردة؟',
   suggestions: ['سياسة الشحن والاسترجاع', 'فروعنا ومواعيد العمل', 'عروض الصيف', 'تتبع طلبي'],
   showBrand: true,
-  logoUrl: null,
+  logoUrl: 'https://elshawwa.com/images/logos/8/elshawwa.png',
   poweredBy: true,
 };
 
@@ -119,7 +119,7 @@ export async function seedDemo(): Promise<{ seeded: boolean }> {
     'info@elshwwa.com',
     '+201153666660',
     JSON.stringify({
-      logoUrl: null,
+      logoUrl: 'https://elshawwa.com/images/logos/8/elshawwa.png',
       colors: { primary: ELSHAWWA_THEME.primary, secondary: ELSHAWWA_THEME.secondary, accent: '#7A0E14' },
       font: 'Cairo',
     }),

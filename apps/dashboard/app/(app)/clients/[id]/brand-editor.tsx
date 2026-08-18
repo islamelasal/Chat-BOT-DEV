@@ -3,6 +3,86 @@
 import { useRef, useState } from 'react';
 import { Button, Card, CardHeader, Field, Input } from '@/components/ui';
 
+/** تحسين جودة الصورة: تكبير ×2 (LANCZOS مكافئ عبر خطوتين) + توضيح خفيف + إزالة خلفية بيضاء
+ *  كل شيء client-side — لا تُرسل الصورة لأي خادم */
+function enhanceImage(img: HTMLImageElement): { dataUrl: string; width: number; height: number } {
+  const MAX_W = 512;
+  const scale = Math.min(2, MAX_W / img.naturalWidth);
+  const w = Math.max(64, Math.round(img.naturalWidth * scale));
+  const h = Math.max(64, Math.round(img.naturalHeight * scale));
+
+  // تكبير تدريجي (نصفين) — أقرب ما يمكن لـ LANCZOS في خطوة واحدة
+  const step = (src: HTMLCanvasElement, tw: number, th: number) => {
+    const c = document.createElement('canvas');
+    c.width = tw;
+    c.height = th;
+    const ctx = c.getContext('2d')!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, 0, 0, tw, th);
+    return c;
+  };
+  const src = document.createElement('canvas');
+  src.width = img.naturalWidth;
+  src.height = img.naturalHeight;
+  src.getContext('2d')!.drawImage(img, 0, 0);
+  const mid = step(src, Math.round((src.width + w) / 2), Math.round((src.height + h) / 2));
+  const finalCanvas = step(mid, w, h);
+
+  const fctx = finalCanvas.getContext('2d')!;
+  const imageData = fctx.getImageData(0, 0, w, h);
+  const d = imageData.data;
+
+  // إزالة الخلفية البيضاء (flood-fill من الحواف) للحفاظ على الشفافية
+  const visited = new Uint8Array(w * h);
+  const queue: number[] = [];
+  const isWhite = (i: number) => d[i]! > 240 && d[i + 1]! > 240 && d[i + 2]! > 240;
+  const tryPush = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const idx = y * w + x;
+    if (visited[idx]) return;
+    visited[idx] = 1;
+    const i = idx * 4;
+    if (isWhite(i)) {
+      queue.push(idx);
+      d[i + 3] = 0;
+    }
+  };
+  for (let x = 0; x < w; x++) { tryPush(x, 0); tryPush(x, h - 1); }
+  for (let y = 0; y < h; y++) { tryPush(0, y); tryPush(w - 1, y); }
+  while (queue.length) {
+    const idx = queue.pop()!;
+    const x = idx % w;
+    const y = (idx / w) | 0;
+    tryPush(x + 1, y); tryPush(x - 1, y); tryPush(x, y + 1); tryPush(x, y - 1);
+  }
+  fctx.putImageData(imageData, 0, 0);
+
+  // توضيح خفيف (unsharp mask مبسط عبر كونفوليوشن 3×3)
+  const sharp = (strength = 0.28) => {
+    const data = fctx.getImageData(0, 0, w, h);
+    const srcD = new Uint8ClampedArray(data.data);
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = (y * w + x) * 4;
+        if (srcD[i + 3]! === 0) continue; // حافظ على الشفاف
+        for (let c = 0; c < 3; c++) {
+          const cur = srcD[i + c]!;
+          const blur =
+            (srcD[i - 4 + c]! + srcD[i + 4 + c]! + srcD[i - w * 4 + c]! + srcD[i + w * 4 + c]!) * 0.5 +
+            (srcD[i - 4 - w * 4 + c]! + srcD[i + 4 - w * 4 + c]! + srcD[i - 4 + w * 4 + c]! + srcD[i + 4 + w * 4 + c]!) * 0.25;
+          const val = cur + (cur - blur) * strength;
+          data.data[i + c] = val < 0 ? 0 : val > 255 ? 255 : val;
+        }
+      }
+    }
+    fctx.putImageData(data, 0, 0);
+  };
+  sharp();
+
+  return { dataUrl: finalCanvas.toDataURL('image/png'), width: w, height: h };
+}
+
 /** استخراج الألوان المهيمنة من صورة (canvas) — quantization بسيط مع تجميع */
 function extractPalette(img: HTMLImageElement, count = 6): Array<{ hex: string; weight: number }> {
   const size = 120;
@@ -71,6 +151,7 @@ export default function BrandEditor({ client }: { client: any }) {
   const [saved, setSaved] = useState(false);
   const [palette, setPalette] = useState<Array<{ hex: string; weight: number }> | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(client.brand?.logoUrl ?? null);
+  const [enhanceInfo, setEnhanceInfo] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onFile = (file: File) => {
@@ -80,6 +161,9 @@ export default function BrandEditor({ client }: { client: any }) {
       const dataUrl = String(reader.result);
       const img = new Image();
       img.onload = () => {
+        // 1) تحسين الجودة تلقائياً (تكبير + إزالة خلفية + توضيح)
+        const enhanced = enhanceImage(img);
+        // 2) استخراج الألوان من النسخة المحسّنة
         const pal = extractPalette(img);
         setPalette(pal);
         const picked = pickBrandColors(pal);
@@ -88,7 +172,9 @@ export default function BrandEditor({ client }: { client: any }) {
           setSecondary(picked.secondary);
           setAccent(picked.accent);
         }
-        setLogoPreview(dataUrl);
+        setLogoPreview(enhanced.dataUrl);
+        setEnhanceInfo(`${img.naturalWidth}×${img.naturalHeight} → ${enhanced.width}×${enhanced.height} ✓ جودة محسّنة`);
+        setTimeout(() => setEnhanceInfo(''), 4000);
       };
       img.src = dataUrl;
     };
@@ -133,11 +219,12 @@ export default function BrandEditor({ client }: { client: any }) {
           <div className="min-w-0 flex-1">
             <div className="text-xs font-extrabold text-slate-700">لوجو العميل</div>
             <p className="mt-0.5 text-[11px] text-slate-500">PNG/JPG/WebP — الأفضل بشفافية (PNG). يُحفظ كـ Data URL في الديمو.</p>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <Button variant="outline" type="button" onClick={() => fileRef.current?.click()}>📤 رفع اللوجو</Button>
               {logoPreview && (
                 <Button variant="ghost" type="button" onClick={() => { setLogoPreview(null); setPalette(null); }}>إزالة</Button>
               )}
+              {enhanceInfo && <span className="text-[10px] font-bold text-emerald-600">{enhanceInfo}</span>}
             </div>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
           </div>
