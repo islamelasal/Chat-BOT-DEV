@@ -1,11 +1,16 @@
-import Link from 'next/link';
-import { apiServer } from '@/lib/api';
-import { Card, CardHeader, Table } from '@/components/ui';
+'use client';
 
-export default async function ConversationsPage() {
-  const conversations = await apiServer<any[]>('/conversations?limit=100');
-  const clients = await apiServer<any[]>('/clients');
-  const clientName = (id: string) => clients.find((c) => c.id === id)?.name ?? id;
+import { useApi } from '@/lib/client-api';
+import { Card, CardHeader, Table } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
+
+export default function ConversationsPage() {
+  const { data: conversations, error: convError } = useApi<any[]>('/conversations?limit=100');
+  const { data: clients } = useApi<any[]>('/clients');
+  const clientName = (id: string) => (clients ?? []).find((c) => c.id === id)?.name ?? id;
+
+  if (convError) return <PageError msg={convError} />;
+  if (!conversations) return <PageLoading />;
 
   return (
     <div className="space-y-6">

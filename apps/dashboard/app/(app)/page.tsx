@@ -1,6 +1,10 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { apiServer } from '@/lib/api';
+import { apiClient } from '@/lib/client-api';
 import { Badge, Card, CardHeader, Stat } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
 import LiveOverview from '@/components/live-overview';
 
 interface Overview {
@@ -21,32 +25,22 @@ interface Overview {
   alerts: Array<{ id: string; severity: string; title: string; createdAt: number }>;
 }
 
-const EMPTY_OVERVIEW: Overview = {
-  worker: { alive: false, lastPulse: null },
-  providers: [],
-  today: { messages: 0, tokensIn: 0, tokensOut: 0, costUsd: 0, errors: 0 },
-  alerts: [],
-};
+export default function DashboardPage() {
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [error, setError] = useState('');
 
-export default async function DashboardPage() {
-  let overview: Overview;
-  let usage: any;
-  let conversations: any[];
-  try {
-    overview = await apiServer<Overview>('/status/overview');
-  } catch {
-    overview = EMPTY_OVERVIEW;
-  }
-  try {
-    usage = await apiServer<any>('/usage/summary');
-  } catch {
-    usage = null;
-  }
-  try {
-    conversations = await apiServer<any[]>('/conversations?limit=6');
-  } catch {
-    conversations = [];
-  }
+  useEffect(() => {
+    apiClient<Overview>('/status/overview')
+      .then(setOverview)
+      .catch((e) => setError((e as Error).message));
+    apiClient<any[]>('/conversations?limit=6')
+      .then(setConversations)
+      .catch(() => {});
+  }, []);
+
+  if (error) return <PageError msg={error} />;
+  if (!overview) return <PageLoading label="جارٍ تحميل النظرة العامة..." />;
 
   const fmt = (n: number) => n.toLocaleString('ar-EG');
 
@@ -62,7 +56,6 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      {/* بطاقات الأرقام */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <Stat label="رسائل اليوم" value={fmt(overview.today.messages)} sub="عبر كل العملاء" accent="text-emerald-600" />
         <Stat label="توكنز اليوم" value={fmt(overview.today.tokensIn + overview.today.tokensOut)} sub={`دخل ${fmt(overview.today.tokensIn)} / خرج ${fmt(overview.today.tokensOut)}`} />
@@ -76,11 +69,9 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* حالة حية */}
       <LiveOverview />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* المزودون */}
         <Card className="lg:col-span-2">
           <CardHeader
             title="المزودون والنماذج"
@@ -113,7 +104,6 @@ export default async function DashboardPage() {
           </div>
         </Card>
 
-        {/* آخر المحادثات */}
         <Card>
           <CardHeader
             title="آخر المحادثات"
@@ -134,7 +124,6 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* التنبيهات */}
       {overview.alerts.length > 0 && (
         <Card>
           <CardHeader title="تنبيهات نشطة" subtitle="تُجمع تلقائياً (بحد أقصى تنبيه كل 15 دقيقة للحدث الواحد)" />

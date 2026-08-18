@@ -22,7 +22,7 @@ async function handler(req: NextRequest, ctx: { params: Promise<{ action: string
     return NextResponse.json({ message: 'Not found' }, { status: 404 });
   }
 
-  // خطة الطوارئ: مزامنة كعكة من رمز محفوظ محلياً في المتصفح
+  // خطة الطوارئ: مزامنة كعكة من رمز محفوظ محلياً في المتصفح — مع تحقق فعلي من الصلاحية
   if (path === 'cookie-sync' && req.method === 'POST') {
     try {
       const body = (await req.json()) as { token?: string };
@@ -30,15 +30,30 @@ async function handler(req: NextRequest, ctx: { params: Promise<{ action: string
       if (!token || token.length > 2000) {
         return NextResponse.json({ ok: false }, { status: 400 });
       }
-      const res = NextResponse.json({ ok: true });
-      res.cookies.set(COOKIE_NAME, token, {
-        httpOnly: true,
-        sameSite: 'lax',
-        // خلف بروكسي HTTPS ينتهي فيه TLS: secure:false يضمن العمل في كل الحالات
-        secure: false,
-        path: '/',
-        maxAge: 15 * 60,
-      });
+      // تحقق حقيقي: هل يقبل الـ API هذا الرمز؟
+      let valid = false;
+      try {
+        const check = await fetch(`${API}/auth/me`, {
+          headers: { authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(5000),
+        });
+        valid = check.ok;
+      } catch {
+        valid = false;
+      }
+      const res = NextResponse.json({ ok: valid });
+      if (valid) {
+        res.cookies.set(COOKIE_NAME, token, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: false,
+          path: '/',
+          maxAge: 15 * 60,
+        });
+      } else {
+        // رمز منتهٍ/غير صالح — امسح أي كعكة قديمة بدل التعلق بحلقة
+        res.cookies.set(COOKIE_NAME, '', { maxAge: 0, path: '/' });
+      }
       return res;
     } catch {
       return NextResponse.json({ ok: false }, { status: 400 });

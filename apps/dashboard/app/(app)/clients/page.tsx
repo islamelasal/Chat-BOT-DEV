@@ -1,9 +1,15 @@
-import Link from 'next/link';
-import { apiServer } from '@/lib/api';
-import { Badge, Button, Card, CardHeader, Table } from '@/components/ui';
+'use client';
 
-export default async function ClientsPage() {
-  const clients = await apiServer<any[]>('/clients');
+import Link from 'next/link';
+import { useApi } from '@/lib/client-api';
+import { Badge, Button, Card, CardHeader, Table } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
+
+export default function ClientsPage() {
+  const { data: clients, error } = useApi<any[]>('/clients');
+
+  if (error) return <PageError msg={error} />;
+  if (!clients) return <PageLoading />;
 
   return (
     <div className="space-y-6">

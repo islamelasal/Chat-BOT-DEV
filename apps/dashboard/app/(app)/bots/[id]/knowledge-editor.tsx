@@ -9,6 +9,10 @@ export default function KnowledgeEditor({ bot }: { bot: any }) {
   const [content, setContent] = useState('');
   const [source, setSource] = useState('');
   const [busy, setBusy] = useState(false);
+  // زحف الروابط
+  const [urls, setUrls] = useState('');
+  const [crawlBusy, setCrawlBusy] = useState(false);
+  const [crawlResult, setCrawlResult] = useState('');
 
   const add = async () => {
     if (!title.trim() || !content.trim()) return;
@@ -37,10 +41,64 @@ export default function KnowledgeEditor({ bot }: { bot: any }) {
     setChunks((c: any[]) => c.filter((k) => k.id !== chunkId));
   };
 
+  /** زحف روابط الموقع وتحويلها تلقائياً لشظايا معرفة (مثل SiteGPT) */
+  const crawl = async () => {
+    const list = urls.split('\n').map((u) => u.trim()).filter(Boolean);
+    if (!list.length) return;
+    setCrawlBusy(true);
+    setCrawlResult('');
+    try {
+      const res = await fetch(`/backend/bots/${bot.id}/crawl`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ urls: list }),
+      });
+      const j = await res.json();
+      if (res.ok) {
+        setCrawlResult(`✅ أُضيف ${j.added} عنصر معرفة (${j.skipped} مكرر تم تجاهله)${j.errors?.length ? ` · ${j.errors.length} رابط فشل` : ''}`);
+        setUrls('');
+        // إعادة تحميل المعرفة المحدّثة
+        const fresh = await fetch(`/backend/bots/${bot.id}`, { credentials: 'include' }).then((r) => r.json());
+        setChunks(fresh.knowledgeChunks ?? []);
+      } else {
+        setCrawlResult(`⚠️ ${j?.message ?? 'فشل الزحف'}`);
+      }
+    } catch (err) {
+      setCrawlResult(`⚠️ ${(err as Error).message}`);
+    } finally {
+      setCrawlBusy(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader title="قاعدة المعرفة (RAG)" subtitle="يسترجع البوت الأجزاء الأكثر صلة بكل سؤال — أضف السياسات والمنتجات والأسئلة الشائعة" />
       <div className="space-y-4 p-5">
+        {/* زحف روابط الموقع */}
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-extrabold text-emerald-800">🕸️ تدريب تلقائي من روابط الموقع</div>
+              <div className="text-[10px] text-emerald-600">رابط لكل سطر — يُستخرج النص ويُقسَّم لشظايا جاهزة (حتى 10 روابط)</div>
+            </div>
+          </div>
+          <Textarea
+            rows={3}
+            className="mt-2 font-mono text-xs"
+            dir="ltr"
+            value={urls}
+            onChange={(e) => setUrls(e.target.value)}
+            placeholder={'https://example.com/shipping\nhttps://example.com/faq'}
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <Button variant="outline" onClick={crawl} disabled={crawlBusy || !urls.trim()}>
+              {crawlBusy ? 'جارٍ الزحف...' : '🕸️ زحف وإضافة'}
+            </Button>
+            {crawlResult && <span className="text-[11px] font-bold text-emerald-700">{crawlResult}</span>}
+          </div>
+        </div>
+
         <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
           <div className="grid gap-2">
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="العنوان (مثال: سياسة الشحن)" />

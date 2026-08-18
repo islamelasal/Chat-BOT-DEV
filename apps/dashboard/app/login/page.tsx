@@ -56,8 +56,14 @@ export default function LoginPage() {
       }
       if (j?.token) {
         try {
-          localStorage.setItem('cbd_token', j.token); // خطة الطوارئ
+          localStorage.setItem('cbd_token', j.token);
         } catch {}
+        // مزامنة الكعكة في الخلفية (لا ننتظرها — الدخول لا يعتمد عليها)
+        fetch('/api/auth/cookie-sync', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ token: j.token }),
+        }).catch(() => {});
       }
       router.push('/');
       router.refresh();
@@ -88,6 +94,11 @@ export default function LoginPage() {
         try {
           localStorage.setItem('cbd_token', j.token);
         } catch {}
+        fetch('/api/auth/cookie-sync', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ token: j.token }),
+        }).catch(() => {});
       }
       router.push('/');
       router.refresh();

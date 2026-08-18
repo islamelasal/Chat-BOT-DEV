@@ -1,9 +1,16 @@
-import { apiServer } from '@/lib/api';
-import { Badge, Card, CardHeader } from '@/components/ui';
+'use client';
 
-export default async function ConversationDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const conv = await apiServer<any>(`/conversations/${id}`);
+import { useParams } from 'next/navigation';
+import { useApi } from '@/lib/client-api';
+import { Badge, Card, CardHeader } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
+
+export default function ConversationDetailPage() {
+  const params = useParams<{ id: string }>();
+  const { data: conv, error } = useApi<any>(`/conversations/${params.id}`);
+
+  if (error) return <PageError msg={error} />;
+  if (!conv) return <PageLoading />;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

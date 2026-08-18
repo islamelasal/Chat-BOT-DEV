@@ -1,16 +1,43 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { apiServer } from '@/lib/api';
+import { useParams } from 'next/navigation';
+import { apiClient } from '@/lib/client-api';
 import { Badge, Card, CardHeader, Stat } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
 import BrandEditor from './brand-editor';
 import ThemeEditor from './theme-editor';
 import DomainsEditor from './domains-editor';
 
-export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const client = await apiServer<any>(`/clients/${id}`);
-  const bots = await apiServer<any[]>(`/bots?clientId=${id}`);
-  const stats = await apiServer<any>(`/clients/${id}/stats`);
-  const snippet = await apiServer<{ snippet: string; instructions: string[] }>(`/clients/${id}/snippet`);
+export default function ClientDetailPage() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+  const [client, setClient] = useState<any>(null);
+  const [bots, setBots] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
+  const [snippet, setSnippet] = useState<any>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([
+      apiClient<any>(`/clients/${id}`),
+      apiClient<any[]>(`/bots?clientId=${id}`),
+      apiClient<any>(`/clients/${id}/stats`),
+      apiClient<any>(`/clients/${id}/snippet`),
+    ])
+      .then(([c, b, s, sn]) => {
+        setClient(c);
+        setBots(b);
+        setStats(s);
+        setSnippet(sn);
+      })
+      .catch((e) => setError((e as Error).message));
+  }, [id]);
+
+  if (error) return <PageError msg={error} />;
+  if (!client || !stats || !snippet) return <PageLoading />;
 
   return (
     <div className="space-y-6">
@@ -40,20 +67,16 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* الهوية */}
         <BrandEditor client={client} />
-
-        {/* الثيم */}
         <ThemeEditor client={client} />
       </div>
 
-      {/* مقتطف التضمين */}
       <Card>
         <CardHeader title="مقتطف التضمين (Snippet)" subtitle="ضعه في موقع العميل قبل وسم </body> — يعمل على CS-Cart وWordPress وأي منصة" />
         <div className="space-y-3 p-5">
           <pre className="overflow-x-auto rounded-lg bg-slate-950 p-4 text-[12px] leading-relaxed text-emerald-300" dir="ltr">{snippet.snippet}</pre>
           <ul className="space-y-1.5 text-xs text-slate-500">
-            {snippet.instructions.map((s) => (
+            {snippet.instructions.map((s: string) => (
               <li key={s} className="flex gap-2"><span className="text-emerald-500">•</span>{s}</li>
             ))}
           </ul>
@@ -61,10 +84,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* النطاقات */}
         <DomainsEditor client={client} />
 
-        {/* البوتات */}
         <Card>
           <CardHeader
             title="بوتات العميل"

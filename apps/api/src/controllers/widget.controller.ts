@@ -20,8 +20,8 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { db, json, now } from '@cbd/db';
-import { chatRequestSchema, feedbackSchema, leadSchema } from '@cbd/shared';
+import { db, id as uid, json, now, recordUsage } from '@cbd/db';
+import { chatRequestSchema, feedbackSchema, handoffSchema, leadSchema } from '@cbd/shared';
 import { Public } from '../auth.js';
 import { GatewayService } from '../gateway.service.js';
 import { WidgetService } from '../widget.service.js';
@@ -211,6 +211,41 @@ export class WidgetController {
     const result = await this.widgets.saveLead(sess, { name, email, phone, message }, page);
     audit({ action: 'widget.lead_captured', entity: 'widget', entityId: sess.cid, meta: { email } });
     return { ok: true, id: result.id };
+  }
+
+  @Post('handoff')
+  async handoff(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Headers('origin') origin: string | undefined
+  ) {
+    const parsed = handoffSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('طلب غير صالح');
+    const sess = this.widgets.verify(parsed.data.sessionToken);
+    if (!sess) throw new ForbiddenException('الجلسة منتهية');
+    if (!(await this.widgets.isOriginAllowed(sess.cid, origin))) {
+      throw new ForbiddenException('هذا النطاق غير مسموح له باستخدام البوت');
+    }
+    const ip = (req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip ?? 'unknown').trim();
+    if (!(await this.widgets.rateLimit(ip, sess.cid, sess.vid))) {
+      throw new HttpException('طلبات كثيرة جداً — حاول بعد قليل', 429);
+    }
+    // تسجيل الحدث في العدادات (status=handoff) لتظهر التحويلات في التقارير
+    await recordUsage({
+      id: uid('use'),
+      clientId: sess.cid,
+      botId: sess.bid,
+      providerId: 'human',
+      model: `human-handoff:${parsed.data.method}`,
+      tokensIn: 0,
+      tokensOut: 0,
+      latencyMs: 0,
+      status: 'handoff',
+      costUsd: 0,
+      createdAt: now(),
+    });
+    audit({ action: 'widget.handoff', entity: 'widget', entityId: sess.cid, meta: { method: parsed.data.method } });
+    return { ok: true };
   }
 
   @Post('feedback')

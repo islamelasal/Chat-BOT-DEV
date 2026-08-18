@@ -1,17 +1,45 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { apiServer } from '@/lib/api';
-import { Badge, Card, CardHeader } from '@/components/ui';
+import { useParams } from 'next/navigation';
+import { apiClient } from '@/lib/client-api';
+import { Badge } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
 import PersonaEditor from './persona-editor';
 import KnowledgeEditor from './knowledge-editor';
 import RoutingEditor from './routing-editor';
 import Playground from './playground';
 
-export default async function BotDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const bot = await apiServer<any>(`/bots/${id}`);
-  const providers = await apiServer<any[]>('/providers');
-  const models = await apiServer<any[]>('/providers/models');
-  const clients = await apiServer<any[]>('/clients');
+export default function BotDetailPage() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+  const [bot, setBot] = useState<any>(null);
+  const [providers, setProviders] = useState<any[]>([]);
+  const [models, setModels] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([
+      apiClient<any>(`/bots/${id}`),
+      apiClient<any[]>('/providers'),
+      apiClient<any[]>('/providers/models'),
+      apiClient<any[]>('/clients'),
+    ])
+      .then(([b, p, m, c]) => {
+        setBot(b);
+        setProviders(p);
+        setModels(m);
+        setClients(c);
+      })
+      .catch((e) => setError((e as Error).message));
+  }, [id]);
+
+  if (error) return <PageError msg={error} />;
+  if (!bot) return <PageLoading />;
+
   const client = clients.find((c) => c.id === bot.clientId);
 
   return (

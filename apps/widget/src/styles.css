@@ -328,6 +328,25 @@ body {
   align-items: center;
 }
 
+.cbd-handoff-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cbd-primary) 7%, #fff);
+  border: 1px solid color-mix(in srgb, var(--cbd-primary) 25%, #e5e7eb);
+  color: #1f2937;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.cbd-handoff-link:hover {
+  background: color-mix(in srgb, var(--cbd-primary) 14%, #fff);
+}
+
 .cbd-lead-cancel {
   border: none;
   background: #f3f4f6;

@@ -29,6 +29,11 @@ export interface ThemeConfig {
   leadTitle: string;      // عنوان نموذج البيانات
   leadButton: string;     // نص زر فتح النموذج
   leadAskPhone: boolean;  // طلب التليفون أيضاً
+  handoffEnabled: boolean; // التحويل لمندوب بشري
+  handoffTitle: string;   // عنوان لوحة التحويل
+  handoffWhatsapp: string; // رقم واتساب (دولي بدون +)
+  handoffPhone: string;   // رقم الهاتف
+  handoffEmail: string;   // البريد
 }
 
 export interface BrandKit {
@@ -156,7 +161,7 @@ export interface UsageEvent {
   tokensIn: number;
   tokensOut: number;
   latencyMs: number;
-  status: 'ok' | 'error' | 'fallback' | 'rate_limited';
+  status: 'ok' | 'error' | 'fallback' | 'rate_limited' | 'handoff';
   costUsd: number;
   createdAt: number;            // epoch ms
 }

@@ -1,11 +1,17 @@
-import Link from 'next/link';
-import { apiServer } from '@/lib/api';
-import { Badge, Button, Card, CardHeader, Table } from '@/components/ui';
+'use client';
 
-export default async function BotsPage() {
-  const bots = await apiServer<any[]>('/bots');
-  const clients = await apiServer<any[]>('/clients');
-  const clientName = (id: string) => clients.find((c) => c.id === id)?.name ?? id;
+import Link from 'next/link';
+import { useApi } from '@/lib/client-api';
+import { Badge, Button, Card, CardHeader, Table } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
+
+export default function BotsPage() {
+  const { data: bots, error: botsError } = useApi<any[]>('/bots');
+  const { data: clients } = useApi<any[]>('/clients');
+  const clientName = (id: string) => (clients ?? []).find((c) => c.id === id)?.name ?? id;
+
+  if (botsError) return <PageError msg={botsError} />;
+  if (!bots) return <PageLoading />;
 
   return (
     <div className="space-y-6">

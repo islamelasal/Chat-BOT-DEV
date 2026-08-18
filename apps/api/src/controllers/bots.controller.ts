@@ -16,6 +16,7 @@ import { botCreateSchema, knowledgeChunkSchema, routingPolicySchema } from '@cbd
 import { CurrentUser, Roles } from '../auth.js';
 import type { AuthUser } from '../auth.js';
 import { audit } from '../audit.js';
+import { crawlUrl } from '../crawl.js';
 
 async function botRowToBot(r: any) {
   return {
@@ -119,6 +120,64 @@ export class BotsController {
     );
     audit({ userId: user.id, action: 'bot.knowledge_add', entity: 'bot', entityId: id, meta: { title: parsed.data.title } });
     return { id: chunkId, ...parsed.data };
+  }
+
+  @Roles('super_admin', 'operator')
+  @Post(':id/crawl')
+  async crawl(@Param('id') id: string, @Body() body: unknown, @CurrentUser() user: AuthUser) {
+    const r = await db.get('SELECT id FROM bots WHERE id = ?', id) as any;
+    if (!r) throw new NotFoundException('بوت غير موجود');
+    const urls = (Array.isArray((body as any)?.urls) ? (body as any).urls : [])
+      .map((u: unknown) => String(u).trim())
+      .filter((u: string) => /^https?:\/\/[^\s]+$/.test(u))
+      .slice(0, 10);
+    if (!urls.length) throw new BadRequestException('أدخل رابطاً صحيحاً واحداً على الأقل (يبدأ بـ http)');
+
+    let added = 0;
+    let skipped = 0;
+    const errors: Array<{ url: string; error: string }> = [];
+    const titles: string[] = [];
+
+    for (const url of urls) {
+      try {
+        const result = await crawlUrl(url);
+        titles.push(result.title);
+        for (const chunk of result.chunks) {
+          // منع تكرار نفس المصدر عند إعادة الزحف
+          const exists = await db.get(
+            'SELECT id FROM knowledge_chunks WHERE bot_id = ? AND source = ? AND title = ?',
+            id, url, chunk.title
+          );
+          if (exists) {
+            skipped++;
+            continue;
+          }
+          await db.run(
+            `INSERT INTO knowledge_chunks (id, bot_id, title, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+            uid('kn'), id, chunk.title, chunk.content, url, now()
+          );
+          added++;
+        }
+      } catch (err) {
+        errors.push({ url, error: (err as Error).message });
+      }
+    }
+
+    audit({
+      userId: user.id,
+      action: 'bot.crawl',
+      entity: 'bot',
+      entityId: id,
+      meta: { urls, added, skipped, errors: errors.length },
+    });
+
+    return {
+      added,
+      skipped,
+      errors,
+      titles: titles.slice(0, 5),
+      total: (await db.get('SELECT COUNT(*) AS c FROM knowledge_chunks WHERE bot_id = ?', id) as any)?.c,
+    };
   }
 
   @Roles('super_admin', 'operator')

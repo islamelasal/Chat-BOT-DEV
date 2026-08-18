@@ -1,11 +1,34 @@
-import Link from 'next/link';
-import { apiServer } from '@/lib/api';
-import { Badge, Card, CardHeader, Table } from '@/components/ui';
+'use client';
 
-export default async function LeadsPage({ searchParams }: { searchParams: Promise<{ clientId?: string }> }) {
-  const { clientId } = await searchParams;
-  const leads = await apiServer<any[]>(`/leads?limit=500${clientId ? `&clientId=${clientId}` : ''}`);
-  const clients = await apiServer<any[]>('/clients');
+import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { apiClient } from '@/lib/client-api';
+import { Card, CardHeader, Table } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
+
+function LeadsContent() {
+  const searchParams = useSearchParams();
+  const clientId = searchParams.get('clientId') ?? '';
+  const [leads, setLeads] = useState<any[] | null>(null);
+  const [clients, setClients] = useState<any[]>([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      apiClient<any[]>(`/leads?limit=500${clientId ? `&clientId=${clientId}` : ''}`),
+      apiClient<any[]>('/clients'),
+    ])
+      .then(([l, c]) => {
+        setLeads(l);
+        setClients(c);
+      })
+      .catch((e) => setError((e as Error).message));
+  }, [clientId]);
+
+  if (error) return <PageError msg={error} />;
+  if (!leads) return <PageLoading />;
+
   const clientName = (id: string) => clients.find((c) => c.id === id)?.name ?? id;
 
   return (
@@ -75,5 +98,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function LeadsPage() {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <LeadsContent />
+    </Suspense>
   );
 }

@@ -1,10 +1,32 @@
-import { apiServer } from '@/lib/api';
-import { Card, CardHeader, Stat, Table } from '@/components/ui';
+'use client';
 
-export default async function UsagePage() {
-  const summary = await apiServer<any>('/usage/summary?range=24h');
-  const series = await apiServer<any[]>('/usage/series?range=24h');
-  const recon = await apiServer<any>('/usage/reconciliation');
+import { useEffect, useState } from 'react';
+import { apiClient } from '@/lib/client-api';
+import { Card, CardHeader, Stat, Table } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
+
+export default function UsagePage() {
+  const [summary, setSummary] = useState<any>(null);
+  const [series, setSeries] = useState<any[]>([]);
+  const [recon, setRecon] = useState<any>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      apiClient<any>('/usage/summary?range=24h'),
+      apiClient<any[]>('/usage/series?range=24h'),
+      apiClient<any>('/usage/reconciliation'),
+    ])
+      .then(([s, se, r]) => {
+        setSummary(s);
+        setSeries(se);
+        setRecon(r);
+      })
+      .catch((e) => setError((e as Error).message));
+  }, []);
+
+  if (error) return <PageError msg={error} />;
+  if (!summary || !recon) return <PageLoading />;
 
   const max = Math.max(1, ...series.map((s) => s.messages));
 
@@ -23,7 +45,6 @@ export default async function UsagePage() {
         <Stat label="التكلفة (24 ساعة)" value={`$${summary.totals.costUsd.toFixed(4)}`} accent="text-amber-600" />
       </div>
 
-      {/* رسم بياني بسيط بدون مكتبات */}
       <Card>
         <CardHeader title="الرسائل خلال آخر 24 ساعة" subtitle="كل عمود = ساعة" />
         <div className="flex h-40 items-end gap-1 p-5">

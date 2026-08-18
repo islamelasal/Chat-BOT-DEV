@@ -1,9 +1,15 @@
-import { apiServer } from '@/lib/api';
+'use client';
+
+import { useApi } from '@/lib/client-api';
 import { Card, CardHeader } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
 import TwoFACard from '@/components/twofa-card';
 
-export default async function SettingsPage() {
-  const me = await apiServer<any>('/auth/me');
+export default function SettingsPage() {
+  const { data: me, error } = useApi<any>('/auth/me');
+
+  if (error) return <PageError msg={error} />;
+  if (!me) return <PageLoading />;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -19,7 +25,7 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader title="معلومات النسخة" subtitle="Chat Bot Dev — منصة إدارة وتوزيع بوتات الذكاء الاصطناعي" />
         <div className="space-y-1 p-5 text-xs text-slate-500">
-          <div>الإصدار: v0.2.0 (نواة المنصة)</div>
+          <div>الإصدار: v0.3.0 (نواة المنصة + جمع بيانات + زحف + تحويل بشري)</div>
           <div>المكدس: TypeScript · NestJS · Next.js · PostgreSQL/SQLite · Preact</div>
           <div>العامل الخلفي: نبضات 24/7 + Dead-Man Switch + مصالحات عدادات</div>
         </div>

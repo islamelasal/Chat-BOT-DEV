@@ -8,6 +8,7 @@ const DEFAULT_THEME = {
   headerText: '#FFFFFF', font: 'Cairo', position: 'bottom-left', bubbleStyle: 'pill', windowMode: 'docked',
   welcomeTitle: '', welcomeText: '', suggestions: [], showBrand: true, logoUrl: null, poweredBy: true,
   leadEnabled: true, leadTitle: 'سيب بياناتك وهنتواصل معاك 👋', leadButton: '📞 اطلب التواصل معاك', leadAskPhone: true,
+  handoffEnabled: true, handoffTitle: 'محتاج مساعدة من فريقنا؟ 👨‍💼', handoffWhatsapp: '', handoffPhone: '', handoffEmail: '',
 };
 
 export default function ThemeEditor({ client }: { client: any }) {
@@ -110,6 +111,30 @@ export default function ThemeEditor({ client }: { client: any }) {
                   <option value="false">لا</option>
                 </Select>
               </Field>
+            </div>
+          )}
+        </div>
+        {/* إعدادات التحويل لمندوب بشري */}
+        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-extrabold text-slate-700">👨‍💼 التحويل لمندوب بشري (Human Handoff)</div>
+              <div className="text-[10px] text-slate-400">روابط واتساب/اتصال/بريد مباشرة داخل المحادثة — وتُحصى في العدادات</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => set('handoffEnabled', !form.handoffEnabled)}
+              className={`relative h-5 w-9 rounded-full transition ${form.handoffEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+            >
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${form.handoffEnabled ? 'right-0.5' : 'right-4'}`} />
+            </button>
+          </div>
+          {form.handoffEnabled && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="عنوان اللوحة"><Input value={form.handoffTitle} onChange={(e) => set('handoffTitle', e.target.value)} /></Field>
+              <Field label="واتساب (دولي بدون +)"><Input dir="ltr" value={form.handoffWhatsapp} onChange={(e) => set('handoffWhatsapp', e.target.value)} placeholder="201153666660" /></Field>
+              <Field label="هاتف"><Input dir="ltr" value={form.handoffPhone} onChange={(e) => set('handoffPhone', e.target.value)} placeholder="16959" /></Field>
+              <Field label="بريد"><Input dir="ltr" type="email" value={form.handoffEmail} onChange={(e) => set('handoffEmail', e.target.value)} placeholder="info@example.com" /></Field>
             </div>
           )}
         </div>

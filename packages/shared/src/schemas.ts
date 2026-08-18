@@ -52,6 +52,11 @@ export const themeUpdateSchema = z.object({
   leadTitle: z.string().max(120).optional().default('سيب بياناتك وهنتواصل معاك'),
   leadButton: z.string().max(60).optional().default('📞 اطلب التواصل معاك'),
   leadAskPhone: z.boolean().optional().default(true),
+  handoffEnabled: z.boolean().optional().default(true),
+  handoffTitle: z.string().max(120).optional().default('محتاج مساعدة من فريقنا؟'),
+  handoffWhatsapp: z.string().max(20).optional().default(''),
+  handoffPhone: z.string().max(20).optional().default(''),
+  handoffEmail: z.string().email().optional().default(''),
 });
 
 export const botCreateSchema = z.object({
@@ -133,6 +138,11 @@ export const leadSchema = z.object({
   email: z.string().email().max(190),
   phone: z.string().max(30).optional().default(''),
   message: z.string().max(1000).optional().default(''),
+});
+
+export const handoffSchema = z.object({
+  sessionToken: z.string().min(10),
+  method: z.enum(['whatsapp', 'phone', 'email']),
 });
 
 export const playgroundSchema = z.object({

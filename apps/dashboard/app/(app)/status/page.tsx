@@ -1,11 +1,28 @@
-import { apiServer } from '@/lib/api';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { apiClient } from '@/lib/client-api';
 import { Badge, Card, CardHeader, Table } from '@/components/ui';
+import { PageError, PageLoading } from '@/components/page-state';
 import LiveOverview from '@/components/live-overview';
 import AlertsList from '@/components/alerts-list';
 
-export default async function StatusPage() {
-  const overview = await apiServer<any>('/status/overview');
-  const heartbeats = await apiServer<any[]>('/status/heartbeats');
+export default function StatusPage() {
+  const [overview, setOverview] = useState<any>(null);
+  const [heartbeats, setHeartbeats] = useState<any[]>([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    Promise.all([apiClient<any>('/status/overview'), apiClient<any[]>('/status/heartbeats')])
+      .then(([o, h]) => {
+        setOverview(o);
+        setHeartbeats(h);
+      })
+      .catch((e) => setError((e as Error).message));
+  }, []);
+
+  if (error) return <PageError msg={error} />;
+  if (!overview) return <PageLoading />;
 
   return (
     <div className="space-y-6">

@@ -45,6 +45,11 @@ const ELSHAWWA_THEME: ThemeConfig = {
   leadTitle: 'سيب بياناتك وهنتواصل معاك 👋',
   leadButton: '📞 اطلب التواصل معاك',
   leadAskPhone: true,
+  handoffEnabled: true,
+  handoffTitle: 'محتاج مساعدة من فريقنا؟ 👨‍💼',
+  handoffWhatsapp: '201153666660',
+  handoffPhone: '16959',
+  handoffEmail: 'info@elshwwa.com',
 };
 
 const ELSHAWWA_KNOWLEDGE = [

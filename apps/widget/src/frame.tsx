@@ -34,6 +34,11 @@ interface Theme {
   leadTitle?: string;
   leadButton?: string;
   leadAskPhone?: boolean;
+  handoffEnabled?: boolean;
+  handoffTitle?: string;
+  handoffWhatsapp?: string;
+  handoffPhone?: string;
+  handoffEmail?: string;
 }
 
 interface Msg {
@@ -101,6 +106,7 @@ function App() {
   const [leadSent, setLeadSent] = useState(false);
   const [leadBusy, setLeadBusy] = useState(false);
   const [leadError, setLeadError] = useState('');
+  const [handoffOpen, setHandoffOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -139,6 +145,7 @@ function App() {
     font: 'Cairo', position: 'bottom-left', bubbleStyle: 'pill', windowMode: 'docked',
     welcomeTitle: 'المساعد الذكي', welcomeText: '', suggestions: [], showBrand: true, logoUrl: null, poweredBy: true,
     leadEnabled: true, leadTitle: 'سيب بياناتك وهنتواصل معاك', leadButton: '📞 اطلب التواصل معاك', leadAskPhone: true,
+    handoffEnabled: true, handoffTitle: 'محتاج مساعدة من فريقنا؟', handoffWhatsapp: '', handoffPhone: '', handoffEmail: '',
   };
 
   const cssVars: Record<string, string> = {
@@ -234,6 +241,16 @@ function App() {
   }
 
   const close = () => window.parent.postMessage({ source: 'cbd-widget', type: 'close' }, '*');
+
+  /** تسجيل نقرة التحويل البشري في العدادات (بدون انتظار) */
+  function logHandoff(method: 'whatsapp' | 'phone' | 'email') {
+    if (!sessionToken) return;
+    fetch(API + '/w/handoff', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionToken, method }),
+    }).catch(() => {});
+  }
 
   async function submitLead() {
     if (!cfg || leadBusy) return;
@@ -358,6 +375,43 @@ function App() {
                 </button>
                 <button className="cbd-lead-cancel" onClick={() => setLeadOpen(false)}>إلغاء</button>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* التحويل لمندوب بشري (Human Handoff) */}
+      {theme.handoffEnabled && (theme.handoffWhatsapp || theme.handoffPhone || theme.handoffEmail) && (
+        <div className="cbd-lead">
+          {!handoffOpen ? (
+            <button className="cbd-lead-btn" onClick={() => setHandoffOpen(true)}>
+              👨‍💼 {theme.handoffTitle ?? 'محتاج مساعدة من فريقنا؟'}
+            </button>
+          ) : (
+            <div className="cbd-lead-form">
+              <div className="cbd-lead-title">تواصل معانا مباشرة:</div>
+              {theme.handoffWhatsapp && (
+                <a
+                  className="cbd-handoff-link"
+                  href={`https://wa.me/${theme.handoffWhatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent('مرحباً، عندي استفسار عن منتجاتكم')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => logHandoff('whatsapp')}
+                >
+                  <span>💬</span> واتساب مباشر
+                </a>
+              )}
+              {theme.handoffPhone && (
+                <a className="cbd-handoff-link" href={`tel:${theme.handoffPhone}`} onClick={() => logHandoff('phone')}>
+                  <span>📞</span> اتصل بينا: {theme.handoffPhone}
+                </a>
+              )}
+              {theme.handoffEmail && (
+                <a className="cbd-handoff-link" href={`mailto:${theme.handoffEmail}`} onClick={() => logHandoff('email')}>
+                  <span>✉️</span> راسلنا بريد
+                </a>
+              )}
+              <button className="cbd-lead-cancel" onClick={() => setHandoffOpen(false)}>إغلاق</button>
             </div>
           )}
         </div>
