@@ -31,6 +31,8 @@ API_INTERNAL_URL=http://127.0.0.1:4000 npx next start -p 3000
 
 **الدخول:** `http://localhost:3000/login` — `admin@chatbotdev.app` / `Admin@1234`
 
+**صفحة حالة الـ API:** `http://localhost:4000/` (بدل شاشة بيضاء — حالة حية + تجربة فورية لبوت الشوا)
+
 **معاينة بوت الشوا:** `http://localhost:3000/demo-store` (متجر يحاكي موقع العميل والودجت الفعلي)
 
 **الإنتاج:** `infra/docker-compose.yml` (Postgres + Redis + API + Worker مستقل + Dashboard + Traefik/HTTPS).

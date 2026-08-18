@@ -33,8 +33,14 @@ export default function Sidebar() {
   const router = useRouter();
 
   const logout = async () => {
-    await fetch('/backend/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch {}
+    try {
+      localStorage.removeItem('cbd_token');
+    } catch {}
     router.push('/login');
+    router.refresh();
   };
 
   return (

@@ -22,7 +22,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: ['error', 'warn', 'log'] });
 
   // 2) حماية الرؤوس + CORS (اللوحة تُدار عبر كعكات httpOnly على نفس النطاق عبر البروكسي)
-  app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false, frameguard: false }));
+  const expressInstance = app.getHttpAdapter().getInstance() as express.Express;
+  expressInstance.set('trust proxy', true); // خلف بروكسي TLS (e2b/Traefik) — لقراءة IP وبروتوكول صحيحين
   const corsOrigins = config.CORS_ORIGINS ? config.CORS_ORIGINS.split(',').map((s) => s.trim()) : true;
   app.use(cors({ origin: corsOrigins, credentials: true }));
 

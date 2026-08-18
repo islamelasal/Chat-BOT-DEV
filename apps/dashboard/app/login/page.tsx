@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bot, ShieldCheck } from 'lucide-react';
 
@@ -13,13 +13,33 @@ export default function LoginPage() {
   // خطوة المصادقة الثنائية
   const [totpTempToken, setTotpTempToken] = useState('');
   const [totpCode, setTotpCode] = useState('');
+  const [checking, setChecking] = useState(true);
+
+  // إن كانت الجلسة موجودة أصلاً → ادخل مباشرة (يمنع رؤية صفحة الدخول بعد الدخول)
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then((r) => (cancelled ? null : r))
+      .then((r) => {
+        if (r && r.ok) {
+          router.replace('/');
+        } else if (!cancelled) {
+          setChecking(false);
+        }
+      })
+      .catch(() => !cancelled && setChecking(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const submitLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError('');
     try {
-      const res = await fetch('/backend/auth/login', {
+      // عبر Route Handler من نفس الأصل — الكعكة تُسجَّل باسم النطاق الحقيقي
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -33,6 +53,11 @@ export default function LoginPage() {
       if (j?.totpRequired) {
         setTotpTempToken(j.tempToken); // ننتقل لخطوة الكود
         return;
+      }
+      if (j?.token) {
+        try {
+          localStorage.setItem('cbd_token', j.token); // خطة الطوارئ
+        } catch {}
       }
       router.push('/');
       router.refresh();
@@ -48,16 +73,21 @@ export default function LoginPage() {
     setBusy(true);
     setError('');
     try {
-      const res = await fetch('/backend/auth/2fa/verify', {
+      const res = await fetch('/api/auth/2fa/verify', {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ tempToken: totpTempToken, code: totpCode }),
       });
+      const j = await res.json().catch(() => null);
       if (!res.ok) {
-        const j = await res.json().catch(() => null);
         setError(j?.message ?? 'كود غير صحيح');
         return;
+      }
+      if (j?.token) {
+        try {
+          localStorage.setItem('cbd_token', j.token);
+        } catch {}
       }
       router.push('/');
       router.refresh();
@@ -67,6 +97,14 @@ export default function LoginPage() {
       setBusy(false);
     }
   };
+
+  if (checking) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6">

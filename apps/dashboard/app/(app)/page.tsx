@@ -21,10 +21,32 @@ interface Overview {
   alerts: Array<{ id: string; severity: string; title: string; createdAt: number }>;
 }
 
+const EMPTY_OVERVIEW: Overview = {
+  worker: { alive: false, lastPulse: null },
+  providers: [],
+  today: { messages: 0, tokensIn: 0, tokensOut: 0, costUsd: 0, errors: 0 },
+  alerts: [],
+};
+
 export default async function DashboardPage() {
-  const overview = await apiServer<Overview>('/status/overview');
-  const usage = await apiServer<any>('/usage/summary');
-  const conversations = await apiServer<any[]>('/conversations?limit=6');
+  let overview: Overview;
+  let usage: any;
+  let conversations: any[];
+  try {
+    overview = await apiServer<Overview>('/status/overview');
+  } catch {
+    overview = EMPTY_OVERVIEW;
+  }
+  try {
+    usage = await apiServer<any>('/usage/summary');
+  } catch {
+    usage = null;
+  }
+  try {
+    conversations = await apiServer<any[]>('/conversations?limit=6');
+  } catch {
+    conversations = [];
+  }
 
   const fmt = (n: number) => n.toLocaleString('ar-EG');
 
