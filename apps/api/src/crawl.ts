@@ -1,7 +1,109 @@
 /**
- * زاحف خفيف — استخراج نص نظيف من صفحة HTML وتقسيمه لشظايا معرفة.
- * بدون تبعيات خارجية — يعمل على أي بيئة Node.
+ * crawl — طبقة جلب صفحات/فيدات العملاء (خلفية بحتة)
+ * ─────────────────────────────────────────────────────────────
+ * تقنيات مطبقة (مستخلصة من دراسة Scrapling v2):
+ *  - سلم تدرّج: خدمة Scrapling الجانبية (بصمة TLS/متصفح خفي) → جلب مباشر محسّن
+ *  - فك ضغط gzip/deflate يدوياً (undici لا يفك الضغط تلقائياً)
+ *  - كشف الترميز: charset من الرأس أو meta — دعم windows-1256 للفيدات العربية
+ *  - كشف الحجب: أكواد + بصمات محتوى ("Just a moment", "access denied"...)
+ *  - احترام Retry-After + إعادة محاولة بتراجع عشوائي (backoff + jitter)
+ *  - حارس SSRF بالـ DNS Pinning
  */
+import { gunzipSync, inflateSync } from 'node:zlib';
+import { decodeBuffer, detectCharset } from './charsets.js';
+
+// ─────────────────────────── كشف الحجب ───────────────────────────
+
+const BLOCKED_STATUS = new Set([401, 403, 407, 429, 444, 500, 502, 503, 504]);
+const BLOCKED_MARKERS = [
+  'just a moment', 'access denied', 'cf-browser-verification', 'captcha',
+  'rate limit', 'sorry, you have been blocked', 'verify you are human',
+  'challenge-platform', 'attention required',
+];
+
+export function isBlockedResponse(status: number, body: string): boolean {
+  if (BLOCKED_STATUS.has(status)) return true;
+  const low = body.slice(0, 20_000).toLowerCase();
+  return BLOCKED_MARKERS.some((m) => low.includes(m));
+}
+
+function parseRetryAfter(headers: Headers): number {
+  const v = headers.get('retry-after');
+  if (!v) return 0;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 60) : 0;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ─────────────────────────── فك الضغط ───────────────────────────
+
+function decompress(buf: Buffer, encoding: string | null): Buffer {
+  try {
+    if (encoding === 'gzip') return gunzipSync(buf);
+    if (encoding === 'deflate') return inflateSync(buf);
+    // خوادم أحياناً ترسل gzip برأس deflate — جرب الاثنين بأمان
+    if (buf[0] === 0x1f && buf[1] === 0x8b) return gunzipSync(buf);
+  } catch {
+    /* تجاهل — سنتعامل معه كبيانات خام */
+  }
+  return buf;
+}
+
+// ─────────────────────────── الجلب المباشر المحسّن ───────────────────────────
+
+export interface DirectFetchResult {
+  ok: boolean;
+  status: number;
+  text: string;
+  url: string;
+  blocked: boolean;
+  contentType: string;
+}
+
+export async function fetchDirect(
+  url: string,
+  opts?: { timeoutMs?: number; attempts?: number }
+): Promise<DirectFetchResult> {
+  const attempts = opts?.attempts ?? 2;
+  const timeoutMs = opts?.timeoutMs ?? 15_000;
+  let lastError = 'فشل الاتصال';
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'accept-language': 'ar-EG,ar;q=0.9,en;q=0.6',
+          'accept-encoding': 'gzip, deflate',
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const contentType = res.headers.get('content-type') ?? '';
+      const encoding = res.headers.get('content-encoding');
+      const raw = Buffer.from(await res.arrayBuffer());
+      const buf = decompress(raw, encoding);
+      const text = decodeBuffer(buf, detectCharset(contentType, buf.subarray(0, 4096).toString('latin1')));
+      const blocked = isBlockedResponse(res.status, text);
+      if (blocked && attempt < attempts - 1) {
+        // احترام Retry-After ثم إعادة محاولة بتراجع عشوائي
+        const wait = parseRetryAfter(res.headers) * 1000 || (1000 + Math.random() * 1500) * (attempt + 1);
+        await sleep(wait);
+        continue;
+      }
+      return { ok: res.ok, status: res.status, text, url: res.url, blocked, contentType };
+    } catch (err) {
+      lastError = (err as Error).message;
+      if (attempt < attempts - 1) await sleep(800 + Math.random() * 1200);
+    }
+  }
+  return { ok: false, status: 0, text: '', url, blocked: false, contentType: '', error: lastError } as any;
+}
+
+// ─────────────────────────── استخراج النص ───────────────────────────
 
 function decodeEntities(html: string): string {
   return html
@@ -19,22 +121,17 @@ export interface CrawlResult {
   chunks: Array<{ title: string; content: string; source: string }>;
 }
 
-/** استخراج النص من HTML خام */
 export function extractText(html: string): string {
   let s = decodeEntities(html);
-  // إزالة الكتل غير النصية
   s = s.replace(/<script[\s\S]*?<\/script>/gi, ' ');
   s = s.replace(/<style[\s\S]*?<\/style>/gi, ' ');
   s = s.replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ');
   s = s.replace(/<svg[\s\S]*?<\/svg>/gi, ' ');
   s = s.replace(/<template[\s\S]*?<\/template>/gi, ' ');
-  // تحويل الفواصل إلى أسطر
   s = s.replace(/<br\s*\/?>/gi, '\n');
   s = s.replace(/<\/(p|div|li|h1|h2|h3|h4|h5|h6|tr|section|article)>/gi, '\n');
   s = s.replace(/<\/?(li|tr)[^>]*>/gi, '\n• ');
-  // إزالة كل الوسوم المتبقية
   s = s.replace(/<[^>]+>/g, ' ');
-  // تنظيف المسافات
   s = s
     .split('\n')
     .map((line) => line.replace(/[ \t\r]+/g, ' ').trim())
@@ -43,7 +140,6 @@ export function extractText(html: string): string {
   return s;
 }
 
-/** تقسيم النص إلى شظايا ~1400 حرف مع تداخل 150 */
 export function chunkText(text: string, maxLen = 1400, overlap = 150): string[] {
   const lines = text.split('\n').filter((l) => l.trim().length > 0);
   const chunks: string[] = [];
@@ -57,21 +153,27 @@ export function chunkText(text: string, maxLen = 1400, overlap = 150): string[] 
     }
   }
   if (current.trim().length > 40) chunks.push(current.trim());
-  return chunks.slice(0, 30); // سقف معقول لكل صفحة
+  return chunks.slice(0, 30);
 }
 
-/** زحف صفحة واحدة وإرجاع شظايا جاهزة للحفظ
- *  سلسلة تدرّج: خدمة Scrapling الجانبية (تجاوز Cloudflare) → الزاحف المدمج */
+/** يبدو النص كصفحة HTML (مفيد لكشف "الفيد الذي يعيد صفحة ويب") */
+export function looksLikeHtml(text: string): boolean {
+  const t = text.trimStart().slice(0, 500).toLowerCase();
+  return t.startsWith('<!doctype') || t.startsWith('<html') || /<(head|body|meta|script|div)\b/.test(t);
+}
+
+// ─────────────────────────── الزحف بسلم التدرّج ───────────────────────────
+
 export async function crawlUrl(url: string, timeoutMs = 30000): Promise<CrawlResult> {
-  // 1) خدمة Scrapling إن كانت مضبوطة
+  // 1) خدمة Scrapling الجانبية (بصمة TLS / متصفح خفي يحل Cloudflare)
   const scraplingUrl = process.env.SCRAPLING_URL ?? '';
   if (scraplingUrl) {
     try {
       const sres = await fetch(`${scraplingUrl.replace(/\/+$/, '')}/crawl`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url }),
-        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({ url, strategy: 'auto', timeout_ms: timeoutMs }),
+        signal: AbortSignal.timeout(timeoutMs + 20_000),
       });
       if (sres.ok) {
         const j = (await sres.json()) as { ok?: boolean; html?: string; title?: string; error?: string };
@@ -90,28 +192,20 @@ export async function crawlUrl(url: string, timeoutMs = 30000): Promise<CrawlRes
         }
       }
     } catch {
-      /* استمر للزاحف المدمج */
+      /* استمر للجلب المباشر المحسّن */
     }
   }
 
-  // 2) الزاحف المدمج (fetch عادي)
-  const res = await fetch(url, {
-    headers: {
-      'user-agent': 'Mozilla/5.0 (compatible; ChatBotDevCrawler/1.0)',
-      accept: 'text/html,application/xhtml+xml',
-    },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const contentType = res.headers.get('content-type') ?? '';
-  if (!contentType.includes('html') && !contentType.includes('text')) {
+  // 2) الجلب المباشر المحسّن (فك ضغط + ترميز + حجب + إعادة محاولة)
+  const res = await fetchDirect(url, { timeoutMs: 15_000 });
+  if (!res.ok) throw new Error(`HTTP ${res.status}${res.blocked ? ' (محجوب)' : ''}`);
+  const contentType = res.contentType ?? '';
+  if (!contentType.includes('html') && !contentType.includes('text') && !contentType.includes('xml')) {
     throw new Error('المحتوى ليس صفحة HTML');
   }
-  const html = await res.text();
-  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const titleMatch = res.text.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const pageTitle = decodeEntities(titleMatch?.[1] ?? url).trim();
-  const text = extractText(html);
+  const text = extractText(res.text);
   if (text.length < 60) throw new Error('لا يوجد محتوى نصي كافٍ');
   const parts = chunkText(text);
   return {
@@ -124,7 +218,8 @@ export async function crawlUrl(url: string, timeoutMs = 30000): Promise<CrawlRes
   };
 }
 
-/** هل عنوان IP خاص/داخلي؟ (IPv4 كامل + IPv6 أشكال محلية) */
+// ─────────────────────────── حارس SSRF ───────────────────────────
+
 function isPrivateIp(ip: string): boolean {
   if (ip === '::1' || ip === '::' || ip === 'fc00::' || /^fe[89ab]/.test(ip)) return true;
   const m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -135,7 +230,7 @@ function isPrivateIp(ip: string): boolean {
   if (a === 169 && b === 254) return true;
   if (a === 172 && b >= 16 && b <= 31) return true;
   if (a === 192 && b === 168) return true;
-  if (a >= 224) return true; // multicast/reserved
+  if (a >= 224) return true;
   return false;
 }
 
@@ -150,10 +245,6 @@ export function isPrivateHost(url: string): boolean {
   }
 }
 
-/**
- * حارس SSRF كامل (معيار DNS Pinning): يحل النطاق فعلياً ويتأكد أن عنوان
- * الحل ليس داخلياً — يمنع خداع `metadata.google.internal` وأمثاله.
- */
 export async function isPrivateUrl(url: string): Promise<boolean> {
   if (isPrivateHost(url)) return true;
   try {
@@ -163,6 +254,6 @@ export async function isPrivateUrl(url: string): Promise<boolean> {
     const resolved = await dns.promises.lookup(host, { all: true });
     return resolved.some((r) => isPrivateIp(r.address));
   } catch {
-    return false; // فشل الحل — سيُعالج كفشل زحف عادي
+    return false;
   }
 }

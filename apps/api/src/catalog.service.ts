@@ -13,6 +13,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { db, id, now } from '@cbd/db';
+import { fetchDirect, looksLikeHtml } from './crawl.js';
 
 export interface NormalizedProduct {
   externalId: string;
@@ -64,46 +65,40 @@ export class CatalogService {
   // ─────────────────────────── الجلب ───────────────────────────
 
   private async fetchFeed(url: string): Promise<string> {
-    // 1) مباشر
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'user-agent': 'Mozilla/5.0 (compatible; ChatBotDevFeed/1.0)',
-          accept: '*/*',
-        },
-        redirect: 'follow',
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (res.ok) {
-        const len = Number(res.headers.get('content-length') ?? 0);
-        if (len > MAX_FEED_BYTES) throw new Error('حجم الفيد أكبر من 5MB');
-        const text = await res.text();
-        if (text.length > MAX_FEED_BYTES) throw new Error('حجم الفيد أكبر من 5MB');
-        return text;
+    // 1) جلب مباشر محسّن (فك ضغط gzip + ترميز windows-1256/utf-8 + كشف حجب + إعادة محاولة)
+    const direct = await fetchDirect(url, { timeoutMs: 25_000, attempts: 2 });
+    if (direct.ok && direct.text.length > 0) {
+      if (looksLikeHtml(direct.text)) {
+        throw new Error('الرابط يعيد صفحة ويب (HTML) وليس فيد بيانات — تحقق من رابط الفيد');
       }
-      throw new Error(`HTTP ${res.status}`);
-    } catch (err) {
-      const directError = (err as Error).message;
-      // 2) عبر خدمة Scrapling (تجاوز Cloudflare) إن كانت متاحة
-      const scraplingUrl = process.env.SCRAPLING_URL ?? '';
-      if (scraplingUrl) {
-        try {
-          const sres = await fetch(`${scraplingUrl.replace(/\/+$/, '')}/crawl`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ url }),
-            signal: AbortSignal.timeout(30_000),
-          });
-          if (sres.ok) {
-            const j = (await sres.json()) as { ok?: boolean; html?: string; error?: string };
-            if (j.ok && j.html && j.html.length > 100) return j.html;
-          }
-        } catch {
-          /* استمر للخطأ الأصلي */
-        }
-      }
-      throw new Error(`فشل جلب الفيد: ${directError}`);
+      return direct.text;
     }
+    const directError = direct.ok ? 'محتوى فارغ' : `HTTP ${direct.status || 'تعذر الاتصال'}${direct.blocked ? ' (محجوب)' : ''}`;
+
+    // 2) عبر خدمة Scrapling (تتخطى الحماية وتبصم كمتصفح)
+    const scraplingUrl = process.env.SCRAPLING_URL ?? '';
+    if (scraplingUrl) {
+      try {
+        const sres = await fetch(`${scraplingUrl.replace(/\/+$/, '')}/crawl`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ url, strategy: 'auto', timeout_ms: 30_000 }),
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (sres.ok) {
+          const j = (await sres.json()) as { ok?: boolean; html?: string; error?: string };
+          if (j.ok && j.html && j.html.length > 100) {
+            if (looksLikeHtml(j.html)) {
+              throw new Error('الرابط يعيد صفحة ويب (HTML) وليس فيد بيانات — تحقق من رابط الفيد');
+            }
+            return j.html;
+          }
+        }
+      } catch {
+        /* استمر للخطأ الأصلي */
+      }
+    }
+    throw new Error(`فشل جلب الفيد: ${directError}`);
   }
 
   // ─────────────────────────── المحلل ───────────────────────────
