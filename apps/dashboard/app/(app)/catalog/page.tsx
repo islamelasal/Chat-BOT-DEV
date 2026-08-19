@@ -29,6 +29,19 @@ interface ProductRow {
   productUrl: string;
 }
 
+async function waitJob(jobId: string, onProgress?: (done: number, total: number) => void): Promise<any> {
+  for (let i = 0; i < 600; i++) {
+    const job = await apiClient<any>(`/catalog/jobs/${jobId}`);
+    if (job.status === 'running') {
+      onProgress?.(Number(job.progress ?? 0), Number(job.total ?? 0));
+      await new Promise((r) => setTimeout(r, 1500));
+      continue;
+    }
+    return job;
+  }
+  return { status: 'timeout' };
+}
+
 function CatalogContent() {
   const searchParams = useSearchParams();
   const clientId = searchParams.get('clientId') ?? '';
@@ -74,19 +87,27 @@ function CatalogContent() {
     setSyncing(true);
     setSyncMsg('');
     try {
-      const res = await apiClient<any>(`/catalog/${selected}/sync`, { method: 'POST', json: {} });
-      setSyncMsg(
-        res.ok
-          ? `✅ مزامنة ناجحة: ${res.total} منتج — ${res.inserted} جديد · ${res.updated} محدَّث · ${res.unchanged} بلا تغيير (${res.durationMs}ms)`
-          : `⚠️ ${res.error ?? 'فشلت المزامنة'}`
-      );
+      const started = await apiClient<any>(`/catalog/${selected}/sync`, { method: 'POST', json: {} });
+      const job = await waitJob(started.jobId, (done, total) => {
+        setSyncMsg(`⏳ جاري المزامنة: ${done.toLocaleString('ar-EG')}/${total.toLocaleString('ar-EG')} منتج (${total ? Math.round((done / total) * 100) : 0}%)`);
+      });
+      const summary = job?.summary;
+      if (job?.status === 'done' && summary) {
+        setSyncMsg(
+          `✅ مزامنة ناجحة: ${summary.total} منتج — ${summary.inserted} جديد · ${summary.updated} محدَّث · ${summary.unchanged} بلا تغيير (${summary.durationMs}ms)`
+        );
+      } else if (job?.status === 'timeout') {
+        setSyncMsg('⏳ المعالجة لسه شغالة — حدّث الصفحة بعد قليل لمتابعة النتيجة');
+      } else {
+        setSyncMsg(`⚠️ ${summary?.error || job?.error || 'فشلت المزامنة'}`);
+      }
       // تحديث الشاشة
-      const [p, s] = await Promise.all([
+      const [p2, s2] = await Promise.all([
         apiClient<ProductRow[]>(`/catalog/${selected}/products?limit=100`),
         apiClient<any>(`/catalog/${selected}/stats`),
       ]);
-      setProducts(p);
-      setStats(s);
+      setProducts(p2);
+      setStats(s2);
       apiClient<CatalogRow[]>('/catalog').then(setCatalogs).catch(() => {});
     } catch (err) {
       setSyncMsg(`⚠️ ${(err as Error).message}`);
@@ -127,6 +148,7 @@ function CatalogContent() {
           <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={syncing || uploading}>
             {uploading ? 'جارٍ الرفع...' : '📤 رفع فيد من الجهاز'}
           </Button>
+          {uploading && <span className="text-[11px] text-slate-500">جاري قراءة وتحليل الملف — الفيدات الكبيرة قد تأخذ بعض الوقت</span>}
           <input
             ref={fileRef}
             type="file"
@@ -135,8 +157,8 @@ function CatalogContent() {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file || !selected) return;
-              if (file.size > 8 * 1024 * 1024) {
-                setUploadMsg('⚠️ حجم الملف يتجاوز 8 ميجابايت');
+              if (file.size > 50 * 1024 * 1024) {
+                setUploadMsg('⚠️ حجم الملف يتجاوز 50 ميجابايت — قسم الفيد أو استخدم الرابط المباشر');
                 return;
               }
               setUploading(true);
@@ -144,12 +166,21 @@ function CatalogContent() {
               setSyncMsg('');
               try {
                 const text = await file.text();
-                const res = await apiClient<any>(`/catalog/${selected}/upload`, { method: 'POST', json: { feed: text } });
-                setUploadMsg(
-                  res.ok
-                    ? `✅ رُفع الفيد وحُلل: ${res.total} منتج — ${res.inserted} جديد · ${res.updated} محدَّث · ${res.unchanged} بلا تغيير`
-                    : `⚠️ ${res.error ?? 'فشل تحليل الفيد'}`
-                );
+                setUploadMsg('⏳ جاري رفع وتحليل الفيد...');
+                const started = await apiClient<any>(`/catalog/${selected}/upload`, { method: 'POST', json: { feed: text } });
+                const job = await waitJob(started.jobId, (done, total) => {
+                  setUploadMsg(`⏳ جاري التحليل: ${done.toLocaleString('ar-EG')}/${total.toLocaleString('ar-EG')} منتج (${total ? Math.round((done / total) * 100) : 0}%)`);
+                });
+                const summary = job?.summary;
+                if (job?.status === 'done' && summary) {
+                  setUploadMsg(
+                    `✅ رُفع الفيد وحُلل: ${summary.total} منتج — ${summary.inserted} جديد · ${summary.updated} محدَّث · ${summary.unchanged} بلا تغيير (${summary.durationMs}ms)`
+                  );
+                } else if (job?.status === 'timeout') {
+                  setUploadMsg('⏳ التحليل لسه شغال — حدّث الصفحة بعد قليل');
+                } else {
+                  setUploadMsg(`⚠️ ${summary?.error || job?.error || 'فشل تحليل الفيد'}`);
+                }
                 // تحديث الشاشة
                 const [p2, s2] = await Promise.all([
                   apiClient<ProductRow[]>(`/catalog/${selected}/products?limit=100`),

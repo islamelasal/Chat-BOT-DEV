@@ -105,7 +105,7 @@ export const db: Db = (() => {
 
 export async function migrate(): Promise<void> {
   const schema = readFileSync(schemaPath(), 'utf8');
-  const version = 4;
+  const version = 5;
   let applied: Row | undefined;
   try {
     applied = await db.get('SELECT version FROM _migrations ORDER BY version DESC LIMIT 1');
@@ -127,6 +127,7 @@ export async function migrate(): Promise<void> {
       "ALTER TABLE bots ADD COLUMN IF NOT EXISTS fallback_msg TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE catalog_products ADD COLUMN IF NOT EXISTS is_deal INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE catalog_products ADD COLUMN IF NOT EXISTS is_bride_essential INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE catalog_products ADD COLUMN IF NOT EXISTS attrs_json TEXT NOT NULL DEFAULT ''",
     ];
     for (const stmt of pgCols) await db.exec(stmt);
   } else {
@@ -138,6 +139,7 @@ export async function migrate(): Promise<void> {
     await ensureColumn('bots', 'fallback_msg', "TEXT NOT NULL DEFAULT ''");
     await ensureColumn('catalog_products', 'is_deal', "INTEGER NOT NULL DEFAULT 0");
     await ensureColumn('catalog_products', 'is_bride_essential', "INTEGER NOT NULL DEFAULT 0");
+    await ensureColumn('catalog_products', 'attrs_json', "TEXT NOT NULL DEFAULT ''");
   }
   await db.run('INSERT INTO _migrations (version, applied_at) VALUES (?, ?)', version, Date.now());
 }
@@ -252,6 +254,26 @@ export const cache: Cache = process.env.REDIS_URL
 export const id = (prefix: string) => `${prefix}_${randomUUID().replace(/-/g, '').slice(0, 20)}`;
 
 export const now = () => Date.now();
+
+/**
+ * تنفيذ دالة داخل معاملة (BEGIN/COMMIT/ROLLBACK)
+ * — حيوي للملفات الكبيرة: آلاف الإدراجات تتم ككتلة واحدة بدل كتابة فردية لكل صف.
+ */
+export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  await db.exec('BEGIN');
+  try {
+    const result = await fn();
+    await db.exec('COMMIT');
+    return result;
+  } catch (err) {
+    try {
+      await db.exec('ROLLBACK');
+    } catch {
+      /* تجاهل */
+    }
+    throw err;
+  }
+}
 
 export function json<T>(value: unknown, fallback: T): T {
   if (value == null || value === '' || value === '{}' || value === '[]') return fallback;

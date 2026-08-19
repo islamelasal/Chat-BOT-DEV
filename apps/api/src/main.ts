@@ -23,7 +23,13 @@ async function bootstrap() {
   await ensureKanzBot(); // تثبيت/تحديث شخصية كنز الشوا (idempotent)
   await ensureProviderKeys(); // تثبيت مفاتيح المزودين من بيئة التشغيل (مشفرة)
 
-  const app = await NestFactory.create(AppModule, { logger: ['error', 'warn', 'log'] });
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log'],
+    bodyParser: false, // نتحكم في حدود الحجم بأنفسنا (فيدات كبيرة حتى 64MB)
+  });
+  // حدود الأجسام: فيدات كتالوج كبيرة + رفع يدوي حتى 64MB
+  app.use(express.json({ limit: '64mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '64mb' }));
 
   // 2) حماية الرؤوس + CORS (اللوحة تُدار عبر كعكات httpOnly على نفس النطاق عبر البروكسي)
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false, frameguard: false }));

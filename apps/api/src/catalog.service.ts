@@ -12,8 +12,8 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { db, id, now } from '@cbd/db';
-import { fetchDirect, looksLikeHtml, sanitizeFeedUrl } from './crawl.js';
+import { db, id, json, now, withTransaction } from '@cbd/db';
+import { decodeEntities, fetchDirect, looksLikeHtml, sanitizeFeedUrl } from './crawl.js';
 import { BRIDE_DEFAULTS, normalizeArabic } from '@cbd/db/seed-kanz';
 
 export interface NormalizedProduct {
@@ -30,6 +30,18 @@ export interface NormalizedProduct {
   description: string;
   isDeal: boolean;
   isBride: boolean;
+  attrs: Record<string, string>;
+}
+
+export interface SyncJobStatus {
+  jobId: string;
+  clientId: string;
+  status: 'running' | 'done' | 'error';
+  progress: number;
+  total: number;
+  summary: SyncSummary | null;
+  error: string;
+  startedAt: number;
 }
 
 export interface SyncSummary {
@@ -44,8 +56,8 @@ export interface SyncSummary {
   error?: string;
 }
 
-const MAX_FEED_BYTES = 5 * 1024 * 1024;
-const MAX_ITEMS = 20_000;
+const MAX_FEED_BYTES = 50 * 1024 * 1024;   // جلب أونلاين حتى 50MB
+const MAX_ITEMS = 100_000;                    // فيدات ضخمة حتى 100 ألف منتج
 
 const HEADER_ALIASES: Record<string, string[]> = {
   externalId: ['id', 'product_id', 'productid', 'code', 'sku', 'item id', 'product id', 'article'],
@@ -242,6 +254,14 @@ export class CatalogService {
     return map;
   }
 
+  /** تنظيف قيمة XML: فك أقواس CDATA + كيانات HTML — صيغة Google Shopping RSS الحقيقية */
+  private cleanXmlValue(v: string): string {
+    let s = (v ?? '').trim();
+    if (s.startsWith('<![CDATA[')) s = s.slice(9);
+    if (s.endsWith(']]>')) s = s.slice(0, -3);
+    return decodeEntities(s).trim();
+  }
+
   parseXml(text: string): Array<Record<string, string>> {
     const rows: Array<Record<string, string>> = [];
     // نبحث عن عقد المنتج: <item> أو <product> أو <offer>
@@ -251,20 +271,33 @@ export class CatalogService {
     while ((m = blockRe.exec(text)) !== null && count < MAX_ITEMS) {
       const body = m[2]!;
       const row: Record<string, string> = {};
-      const field = (re: RegExp) => {
+      const field = (re: RegExp): string => {
         const f = body.match(re);
-        return f?.[1]?.trim() ?? '';
+        return f?.[1] != null ? this.cleanXmlValue(f[1]) : '';
       };
-      row.externalId = field(/<(?:id|product_id|sku|code)>([\s\S]*?)<\/(?:id|product_id|sku|code)>/i) || field(/<g:id>([\s\S]*?)<\/g:id>/i);
-      row.name = field(/<(?:title|name|product_name)>([\s\S]*?)<\/(?:title|name|product_name)>/i) || field(/<g:title>([\s\S]*?)<\/g:title>/i);
-      row.price = field(/<(?:price|sale_price|g:price)>([\s\S]*?)<\/(?:price|sale_price|g:price)>/i);
-      row.oldPrice = field(/<(?:list_price|old_price|regular_price|g:old_price)>([\s\S]*?)<\/(?:list_price|old_price|regular_price|g:old_price)>/i);
-      row.category = field(/<(?:category|product_category|g:product_type)>([\s\S]*?)<\/(?:category|product_category|g:product_type)>/i);
-      row.brand = field(/<(?:brand|manufacturer|vendor|g:brand)>([\s\S]*?)<\/(?:brand|manufacturer|vendor|g:brand)>/i);
-      row.imageUrl = field(/<(?:image_url|image|g:image_link)>([\s\S]*?)<\/(?:image_url|image|g:image_link)>/i);
-      row.productUrl = field(/<(?:url|link|product_url|g:link)>([\s\S]*?)<\/(?:url|link|product_url|g:link)>/i);
-      row.description = field(/<(?:description|g:description)>([\s\S]*?)<\/(?:description|g:description)>/i);
-      row.inStock = field(/<(?:availability|in_stock)>([\s\S]*?)<\/(?:availability|in_stock)>/i);
+      row.externalId = field(/<(?:g:id|id|product_id|sku|code)>([\s\S]*?)<\/(?:g:id|id|product_id|sku|code)>/i);
+      row.name = field(/<(?:g:title|title|name|product_name)>([\s\S]*?)<\/(?:g:title|title|name|product_name)>/i);
+      const priceRaw = field(/<(?:g:price|price|sale_price)>([\s\S]*?)<\/(?:g:price|price|sale_price)>/i);
+      row.price = priceRaw;
+      const cur = priceRaw.match(/[A-Za-z]{3}/);
+      if (cur) row.currency = cur[0].toUpperCase();
+      row.oldPrice = field(/<(?:g:old_price|list_price|old_price|regular_price)>([\s\S]*?)<\/(?:g:old_price|list_price|old_price|regular_price)>/i);
+      row.category = field(/<(?:g:product_type|category|product_category)>([\s\S]*?)<\/(?:g:product_type|category|product_category)>/i);
+      row.brand = field(/<(?:g:brand|brand|manufacturer|vendor)>([\s\S]*?)<\/(?:g:brand|brand|manufacturer|vendor)>/i);
+      row.imageUrl = field(/<(?:g:image_link|image_url|image)>([\s\S]*?)<\/(?:g:image_link|image_url|image)>/i);
+      row.productUrl = field(/<(?:g:link|url|link|product_url)>([\s\S]*?)<\/(?:g:link|url|link|product_url)>/i);
+      row.description = field(/<(?:g:description|description)>([\s\S]*?)<\/(?:g:description|description)>/i);
+      row.inStock = field(/<(?:g:availability|availability|in_stock)>([\s\S]*?)<\/(?:g:availability|availability|in_stock)>/i);
+      // سمات إضافية (تظهر في بطاقة المنتج وترشيح البوت)
+      const attrs: Record<string, string> = {};
+      for (const [key, tag] of [
+        ['size', 'g:size'], ['gender', 'g:gender'], ['ageGroup', 'g:age_group'],
+        ['mpn', 'g:mpn'], ['itemGroupId', 'g:item_group_id'], ['inventory', 'g:inventory'],
+      ] as const) {
+        const v = field(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'));
+        if (v) attrs[key] = v.slice(0, 120);
+      }
+      if (Object.keys(attrs).length) row.attrsJson = JSON.stringify(attrs);
       if (row.name || row.externalId) rows.push(row);
       count++;
     }
@@ -310,7 +343,20 @@ export class CatalogService {
     if (!name) return null;
     const toNum = (v: string | undefined): number | null => {
       if (v == null || v === '') return null;
-      const n = parseFloat(v.replace(/[^\d.,-]/g, '').replace(',', '.'));
+      const clean = v.replace(/[^\d.,-]/g, '');
+      if (!clean) return null;
+      const lastDot = clean.lastIndexOf('.');
+      const lastComma = clean.lastIndexOf(',');
+      let n: number;
+      if (lastDot > lastComma) {
+        // 1,252.00 → 1252.00 (النقطة عشرية)
+        n = parseFloat(clean.replace(/,/g, ''));
+      } else if (lastComma > lastDot) {
+        // 1.252,00 → 1252.00 (الفاصلة عشرية)
+        n = parseFloat(clean.replace(/\./g, '').replace(',', '.'));
+      } else {
+        n = parseFloat(clean.replace(/,/g, ''));
+      }
       return Number.isFinite(n) ? n : null;
     };
     const price = toNum(row.price) ?? 0;
@@ -332,19 +378,20 @@ export class CatalogService {
       brand: (row.brand ?? '').slice(0, 120),
       price,
       oldPrice: toNum(row.oldPrice),
-      currency: (row.currency ?? 'EGP').slice(0, 10) || 'EGP',
+      currency: ((row.currency ?? '').slice(0, 10) || 'EGP'),
       inStock,
       imageUrl: (row.imageUrl ?? '').slice(0, 500),
       productUrl: (row.productUrl ?? '').slice(0, 500),
       description: (row.description ?? '').slice(0, 2000),
       isDeal: flag(row.isDeal),
       isBride: flag(row.isBride),
+      attrs: row.attrsJson ? json<Record<string, string>>(row.attrsJson, {}) : {},
     };
   }
 
   private hashOf(p: NormalizedProduct): string {
     return createHash('sha256')
-      .update([p.name, p.category, p.brand, p.price, p.oldPrice ?? '', p.inStock ? 1 : 0, p.imageUrl, p.productUrl, p.description.slice(0, 500), p.isDeal ? 1 : 0, p.isBride ? 1 : 0].join('\u0001'))
+      .update([p.name, p.category, p.brand, p.price, p.oldPrice ?? '', p.inStock ? 1 : 0, p.imageUrl, p.productUrl, p.description.slice(0, 500), p.isDeal ? 1 : 0, p.isBride ? 1 : 0, JSON.stringify(p.attrs)].join('\u0001'))
       .digest('hex');
   }
 
@@ -352,7 +399,7 @@ export class CatalogService {
 
   async syncClientCatalog(
     clientId: string,
-    opts?: { sourceUrl?: string; demoOverride?: boolean; feedText?: string }
+    opts?: { sourceUrl?: string; demoOverride?: boolean; feedText?: string; progressCb?: (done: number, total: number) => void }
   ): Promise<SyncSummary> {
     const started = Date.now();
     const catalog = await db.get('SELECT * FROM client_catalogs WHERE client_id = ?', clientId) as any;
@@ -372,53 +419,70 @@ export class CatalogService {
       const rows = this.parseFeed(text);
       summary.total = rows.length;
       const seen = new Set<string>();
-      for (let i = 0; i < rows.length; i++) {
-        const p = this.normalize(rows[i]!, i);
-        if (!p || seen.has(p.externalId)) continue;
-        seen.add(p.externalId);
-        const hash = this.hashOf(p);
-        const existing = await db.get(
-          'SELECT * FROM catalog_products WHERE client_id = ? AND external_id = ?',
-          clientId, p.externalId
-        ) as any;
+      // خريطة مسبقة للموجودين (external_id → صف) — بدل استعلام لكل منتج على حدة
+      const existingRows = (await db.all(
+        'SELECT external_id, content_hash, price, old_price, in_stock FROM catalog_products WHERE client_id = ?',
+        clientId
+      )) as any[];
+      const existingMap = new Map<string, any>(existingRows.map((r) => [String(r.external_id), r]));
+      const bigImport = rows.length > 2000; // الفيدات الضخمة: لا نسجل "جديد" لكل عنصر (ضجيج بلا قيمة)
 
-        if (!existing) {
-          await db.run(
-            `INSERT INTO catalog_products
-              (id, client_id, external_id, name, category, brand, price, old_price, currency, in_stock,
-               image_url, product_url, description, is_deal, is_bride_essential, content_hash, first_seen_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            id('prd'), clientId, p.externalId, p.name, p.category, p.brand, p.price, p.oldPrice,
-            p.currency, p.inStock ? 1 : 0, p.imageUrl, p.productUrl, p.description,
-            p.isDeal ? 1 : 0, p.isBride ? 1 : 0, hash, now(), now()
-          );
-          await this.logChange(clientId, p.externalId, 'new', `أُضيف: ${p.name}`);
-          summary.inserted++;
-        } else if (String(existing.content_hash) !== hash) {
-          const priceChanged = Number(existing.price) !== p.price || Number(existing.old_price ?? 0) !== (p.oldPrice ?? 0);
-          const stockChanged = Number(existing.in_stock) !== (p.inStock ? 1 : 0);
-          await db.run(
-            `UPDATE catalog_products SET
-               name = ?, category = ?, brand = ?, price = ?, old_price = ?, currency = ?, in_stock = ?,
-               image_url = ?, product_url = ?, description = ?, is_deal = ?, is_bride_essential = ?,
-               content_hash = ?, updated_at = ?
-             WHERE client_id = ? AND external_id = ?`,
-            p.name, p.category, p.brand, p.price, p.oldPrice, p.currency, p.inStock ? 1 : 0,
-            p.imageUrl, p.productUrl, p.description, p.isDeal ? 1 : 0, p.isBride ? 1 : 0,
-            hash, now(), clientId, p.externalId
-          );
-          const type = priceChanged ? 'price_changed' : stockChanged ? 'stock_changed' : 'updated';
-          const details = priceChanged
-            ? `السعر: ${existing.price} → ${p.price} ${p.currency}`
-            : stockChanged
-              ? `المخزون: ${Number(existing.in_stock) ? 'متوفر' : 'نفد'} → ${p.inStock ? 'متوفر' : 'نفد'}`
-              : 'تحديث بيانات';
-          await this.logChange(clientId, p.externalId, type, `${details} — ${p.name}`);
-          summary.updated++;
-        } else {
-          summary.unchanged++;
+      // معاملة واحدة للملف كله — ملفات 8MB+ بمئات الآلاف تُكتب ككتلة واحدة (أسرع بعشرات المرات)
+      await withTransaction(async () => {
+        for (let i = 0; i < rows.length; i++) {
+          const p = this.normalize(rows[i]!, i);
+          if (!p || seen.has(p.externalId)) continue;
+          seen.add(p.externalId);
+          const hash = this.hashOf(p);
+          const existing = existingMap.get(p.externalId);
+
+          if (!existing) {
+            await db.run(
+              `INSERT INTO catalog_products
+                (id, client_id, external_id, name, category, brand, price, old_price, currency, in_stock,
+                 image_url, product_url, description, is_deal, is_bride_essential, attrs_json, content_hash, first_seen_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              id('prd'), clientId, p.externalId, p.name, p.category, p.brand, p.price, p.oldPrice,
+              p.currency, p.inStock ? 1 : 0, p.imageUrl, p.productUrl, p.description,
+              p.isDeal ? 1 : 0, p.isBride ? 1 : 0, JSON.stringify(p.attrs), hash, now(), now()
+            );
+            if (!bigImport) await this.logChange(clientId, p.externalId, 'new', `أُضيف: ${p.name}`);
+            existingMap.set(p.externalId, { external_id: p.externalId, content_hash: hash, price: p.price, old_price: p.oldPrice ?? 0, in_stock: p.inStock ? 1 : 0 });
+            summary.inserted++;
+          } else if (String(existing.content_hash) !== hash) {
+            const priceChanged = Number(existing.price) !== p.price || Number(existing.old_price ?? 0) !== (p.oldPrice ?? 0);
+            const stockChanged = Number(existing.in_stock) !== (p.inStock ? 1 : 0);
+            await db.run(
+              `UPDATE catalog_products SET
+                 name = ?, category = ?, brand = ?, price = ?, old_price = ?, currency = ?, in_stock = ?,
+                 image_url = ?, product_url = ?, description = ?, is_deal = ?, is_bride_essential = ?,
+                 attrs_json = ?, content_hash = ?, updated_at = ?
+               WHERE client_id = ? AND external_id = ?`,
+              p.name, p.category, p.brand, p.price, p.oldPrice, p.currency, p.inStock ? 1 : 0,
+              p.imageUrl, p.productUrl, p.description, p.isDeal ? 1 : 0, p.isBride ? 1 : 0,
+              JSON.stringify(p.attrs), hash, now(), clientId, p.externalId
+            );
+            const type = priceChanged ? 'price_changed' : stockChanged ? 'stock_changed' : 'updated';
+            const details = priceChanged
+              ? `السعر: ${existing.price} → ${p.price} ${p.currency}`
+              : stockChanged
+                ? `المخزون: ${Number(existing.in_stock) ? 'متوفر' : 'نفد'} → ${p.inStock ? 'متوفر' : 'نفد'}`
+                : 'تحديث بيانات';
+            await this.logChange(clientId, p.externalId, type, `${details} — ${p.name}`);
+            existingMap.set(p.externalId, { external_id: p.externalId, content_hash: hash, price: p.price, old_price: p.oldPrice ?? 0, in_stock: p.inStock ? 1 : 0 });
+            summary.updated++;
+          } else {
+            summary.unchanged++;
+          }
+
+          // تقرير تقدم للملفات الضخمة (كل 2000) — سجل + نداء راجع لواجهة متابعة حية
+          if ((i + 1) % 2000 === 0) {
+            this.logger.log(`كتالوج ${clientId}: تقدم ${i + 1}/${rows.length} منتج...`);
+            opts?.progressCb?.(i + 1, rows.length);
+          }
         }
-      }
+      });
+
       summary.ok = true;
       summary.itemsTotal = seen.size;
       summary.durationMs = Date.now() - started;
@@ -439,6 +503,53 @@ export class CatalogService {
       this.logger.warn(`كتالوج ${clientId}: ${simulated ? 'محاكاة مؤقتة' : 'فشل'} — ${summary.error}`);
     }
     return summary;
+  }
+
+  // ─────────────────────────── وظائف غير متزامنة (للملفات الضخمة) ───────────────────────────
+
+  private jobs = new Map<string, SyncJobStatus>();
+
+  /** بدء مزامنة/رفع كوظيفة خلفية — الاستجابة فورية واللوحة تتابع التقدم (يزيل مشكلة مهلات البروكسي 30ث) */
+  startSyncJob(clientId: string, opts: { sourceUrl?: string; feedText?: string }): { jobId: string; alreadyRunning?: boolean } {
+    for (const [existingId, job] of this.jobs) {
+      if (job.clientId === clientId && job.status === 'running') {
+        return { jobId: existingId, alreadyRunning: true };
+      }
+    }
+    const jobId = id('job');
+    const job: SyncJobStatus = {
+      jobId, clientId, status: 'running', progress: 0, total: 0,
+      summary: null, error: '', startedAt: now(),
+    };
+    this.jobs.set(jobId, job);
+    void (async () => {
+      try {
+        const summary = await this.syncClientCatalog(clientId, {
+          sourceUrl: opts.sourceUrl,
+          feedText: opts.feedText,
+          progressCb: (done, total) => {
+            job.progress = done;
+            job.total = total;
+          },
+        });
+        job.summary = summary;
+        job.status = summary.ok ? 'done' : 'error';
+        job.error = summary.error ?? '';
+      } catch (err) {
+        job.status = 'error';
+        job.error = (err as Error).message;
+      }
+      // تنظيف: الاحتفاظ بآخر 50 وظيفة
+      if (this.jobs.size > 50) {
+        const oldest = [...this.jobs.keys()].slice(0, this.jobs.size - 50);
+        for (const k of oldest) this.jobs.delete(k);
+      }
+    })();
+    return { jobId };
+  }
+
+  getJob(jobId: string): SyncJobStatus | null {
+    return this.jobs.get(jobId) ?? null;
   }
 
   async syncAll(): Promise<Array<{ clientId: string; ok: boolean; error?: string }>> {
@@ -566,6 +677,7 @@ export class CatalogService {
       description: String(r.description),
       isDeal: Number(r.is_deal) === 1,
       isBrideEssential: Number(r.is_bride_essential) === 1,
+      attrs: json<Record<string, string>>(r.attrs_json, {}),
       firstSeenAt: Number(r.first_seen_at),
       updatedAt: Number(r.updated_at),
     };
@@ -584,8 +696,9 @@ export class CatalogService {
    *  - [SKU: {id}] {title} ({category}): بسعر {price} ج.م (بدلاً من {oldPrice} ج.م) - الماركة: {brand} */
   kanzLine(p: ReturnType<CatalogService['productRow']>): string {
     const old = p.oldPrice && p.oldPrice > p.price ? ` (بدلاً من ${p.oldPrice} ${p.currency})` : '';
+    const size = p.attrs?.size ? ` - المقاس: ${p.attrs.size}` : '';
     const flags = [p.isDeal ? ' ⚡ عرض لقطة' : '', p.isBrideEssential ? ' 👰 أساسي لجهاز العروسة' : ''].join('');
-    return `- [SKU: ${p.externalId}] ${p.name} (${p.category || 'عام'}): بسعر ${p.price} ${p.currency}${old} - الماركة: ${p.brand || 'الشوا'} - متوفر: متوفر - الرابط: ${p.productUrl || 'https://elshawwa.com'}${flags}`;
+    return `- [SKU: ${p.externalId}] ${p.name}${size} (${p.category || 'عام'}): بسعر ${p.price} ${p.currency}${old} - الماركة: ${p.brand || 'الشوا'} - متوفر: متوفر - الرابط: ${p.productUrl || 'https://elshawwa.com'}${flags}`;
   }
 
   /** كتلة كتالوج كنز الشوا الكاملة (أول 8 منتجات) — تُحقن في رسالة النظام */
@@ -611,7 +724,7 @@ export class CatalogService {
     limit = 2
   ): Promise<Array<ReturnType<CatalogService['productRow']>>> {
     const rows = (await db.all(
-      'SELECT * FROM catalog_products WHERE client_id = ? AND in_stock = 1 LIMIT 500',
+      'SELECT * FROM catalog_products WHERE client_id = ? AND in_stock = 1 ORDER BY is_deal DESC, updated_at DESC LIMIT 3000',
       clientId
     )) as any[];
     if (!rows.length) return [];
@@ -712,7 +825,7 @@ export class CatalogService {
       .slice(0, 8);
     if (!words.length) return [];
     const rows = (await db.all(
-      `SELECT * FROM catalog_products WHERE client_id = ? AND in_stock = 1 LIMIT 800`,
+      `SELECT * FROM catalog_products WHERE client_id = ? AND in_stock = 1 ORDER BY is_deal DESC, updated_at DESC LIMIT 3000`,
       clientId
     )) as any[];
     const scored = rows

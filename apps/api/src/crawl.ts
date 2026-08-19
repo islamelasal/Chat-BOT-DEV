@@ -125,11 +125,18 @@ export async function fetchDirect(
   for (const variant of variants) {
     for (let attempt = 0; attempt < attempts; attempt++) {
       try {
-        const res = await fetch(variant, {
-          headers: feedHeaders(),
-          redirect: 'follow',
-          signal: AbortSignal.timeout(timeoutMs),
-        });
+        let extra: Record<string, string> = {};
+      try {
+        const origin = new URL(variant).origin;
+        extra = { referer: origin + '/', origin };
+      } catch {
+        /* تجاهل */
+      }
+      const res = await fetch(variant, {
+        headers: { ...feedHeaders(), ...extra },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(timeoutMs),
+      });
         const contentType = res.headers.get('content-type') ?? '';
         const encoding = res.headers.get('content-encoding');
         const raw = Buffer.from(await res.arrayBuffer());
@@ -153,7 +160,7 @@ export async function fetchDirect(
 
 // ─────────────────────────── استخراج النص ───────────────────────────
 
-function decodeEntities(html: string): string {
+export function decodeEntities(html: string): string {
   return html
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')

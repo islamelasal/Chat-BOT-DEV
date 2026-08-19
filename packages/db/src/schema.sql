@@ -224,6 +224,7 @@ CREATE TABLE IF NOT EXISTS catalog_products (
   description TEXT NOT NULL DEFAULT '',
   is_deal INTEGER NOT NULL DEFAULT 0,            -- ضمن عروض اللقطة
   is_bride_essential INTEGER NOT NULL DEFAULT 0, -- أساسي في جهاز العروسة
+  attrs_json TEXT NOT NULL DEFAULT '',          -- سمات إضافية (مقاس/لون/جنس/MPN/مجموعة)
   content_hash TEXT NOT NULL DEFAULT '',        -- بصمة المحتوى للكشف عن التغييرات
   first_seen_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,

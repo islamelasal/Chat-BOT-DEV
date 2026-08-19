@@ -22,6 +22,13 @@ export class CatalogController {
     return this.catalog.listCatalogs();
   }
 
+  @Get('jobs/:jobId')
+  job(@Param('jobId') jobId: string) {
+    const job = this.catalog.getJob(jobId);
+    if (!job) throw new BadRequestException('الوظيفة غير موجودة');
+    return job;
+  }
+
   @Get(':clientId/products')
   async products(
     @Param('clientId') clientId: string,
@@ -49,16 +56,16 @@ export class CatalogController {
   async upload(@Param('clientId') clientId: string, @Body() body: { feed: string }, @CurrentUser() user: AuthUser) {
     const feed = String(body?.feed ?? '').trim();
     if (!feed) throw new BadRequestException('نص الفيد فارغ');
-    if (feed.length > 8 * 1024 * 1024) throw new BadRequestException('حجم الفيد يتجاوز 8 ميجابايت');
-    const summary = await this.catalog.syncClientCatalog(clientId, { feedText: feed });
+    if (feed.length > 64 * 1024 * 1024) throw new BadRequestException('حجم الفيد يتجاوز 64 ميجابايت');
+    const { jobId, alreadyRunning } = this.catalog.startSyncJob(clientId, { feedText: feed });
     audit({
       userId: user.id,
       action: 'catalog.upload',
       entity: 'catalog',
       entityId: clientId,
-      meta: { ok: summary.ok, total: summary.total, inserted: summary.inserted, updated: summary.updated },
+      meta: { jobId, alreadyRunning: Boolean(alreadyRunning), feedSize: feed.length },
     });
-    return summary;
+    return { async: true, jobId, alreadyRunning: Boolean(alreadyRunning) };
   }
 
   @Roles('super_admin', 'operator')
@@ -73,14 +80,14 @@ export class CatalogController {
     if (override && !config.DEMO_MODE) {
       throw new BadRequestException('تغيير رابط الفيد غير مسموح في وضع الإنتاج');
     }
-    const summary = await this.catalog.syncClientCatalog(clientId, { sourceUrl: override || undefined });
+    const { jobId, alreadyRunning } = this.catalog.startSyncJob(clientId, { sourceUrl: override || undefined });
     audit({
       userId: user.id,
       action: 'catalog.sync',
       entity: 'catalog',
       entityId: clientId,
-      meta: { ok: summary.ok, total: summary.total, inserted: summary.inserted, updated: summary.updated, error: summary.error },
+      meta: { jobId, alreadyRunning: Boolean(alreadyRunning) },
     });
-    return summary;
+    return { async: true, jobId, alreadyRunning: Boolean(alreadyRunning) };
   }
 }
