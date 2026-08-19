@@ -13,7 +13,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { db, id, now } from '@cbd/db';
-import { fetchDirect, looksLikeHtml } from './crawl.js';
+import { fetchDirect, looksLikeHtml, sanitizeFeedUrl } from './crawl.js';
 import { BRIDE_DEFAULTS, normalizeArabic } from '@cbd/db/seed-kanz';
 
 export interface NormalizedProduct {
@@ -70,8 +70,9 @@ export class CatalogService {
   // ─────────────────────────── الجلب ───────────────────────────
 
   private async fetchFeed(url: string): Promise<string> {
-    // 1) الاتصال المباشر (مهلة 8 ثوانٍ — مواصفة v2)
-    const direct = await fetchDirect(url, { timeoutMs: 8_000, attempts: 1 });
+    const cleanUrl = sanitizeFeedUrl(url);
+    // 1) الاتصال المباشر (مهلة 8 ثوانٍ — مواصفة v2) مع متغيرات العنوان (www/بروتوكول)
+    const direct = await fetchDirect(cleanUrl, { timeoutMs: 8_000, attempts: 1, tryVariants: true });
     if (direct.ok && direct.text.length > 0) {
       if (looksLikeHtml(direct.text)) {
         throw new Error('الرابط يعيد صفحة ويب (HTML) وليس فيد بيانات — تحقق من رابط الفيد');
@@ -87,7 +88,7 @@ export class CatalogService {
         const sres = await fetch(`${scraplingUrl.replace(/\/+$/, '')}/crawl`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ url, strategy: 'auto', timeout_ms: 30_000 }),
+          body: JSON.stringify({ url: cleanUrl, strategy: 'auto', timeout_ms: 30_000 }),
           signal: AbortSignal.timeout(60_000),
         });
         if (sres.ok) {
@@ -106,9 +107,10 @@ export class CatalogService {
 
     // 3) البروكسي الآمن CORS (مواصفة v2) — يعيد المحاولة عبر corsproxy.io
     try {
-      const proxied = await fetchDirect(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, {
+      const proxied = await fetchDirect(`https://corsproxy.io/?url=${encodeURIComponent(cleanUrl)}`, {
         timeoutMs: 15_000,
         attempts: 1,
+        tryVariants: false,
       });
       if (proxied.ok && proxied.text.length > 0 && !looksLikeHtml(proxied.text)) {
         return proxied.text;
@@ -118,7 +120,7 @@ export class CatalogService {
     }
 
     // 4) محاكاة شفافة (مواصفة v2): تحديث مؤقت للعروض يضمن عدم توقف الواجهة
-    await this.simulateCatalogRefresh(this.clientIdFromUrl(url));
+    await this.simulateCatalogRefresh(this.clientIdFromUrl(cleanUrl));
     throw new Error(`فشل جلب الفيد (${directError}) — طُبقت محاكاة مؤقتة للعروض`);
   }
 

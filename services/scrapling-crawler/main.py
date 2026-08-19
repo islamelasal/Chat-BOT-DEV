@@ -61,6 +61,14 @@ BLOCKED_MARKERS = [
 ]
 BROWSER_FINGERPRINTS = ["chrome", "firefox", "safari", "edge"]
 MAX_HTML = 2_000_000
+# رؤوس جلب فيدات (RSS/XML/CSV) — مواقع CS-Cart تعاملها كطلب بيانات لا صفحة
+FEED_HEADERS = {
+    "Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, text/csv;q=0.7, */*;q=0.5",
+    "Accept-Language": "ar-EG,ar;q=0.9,en;q=0.6",
+    "Accept-Encoding": "gzip, deflate",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+}
 
 # ─────────────────────────── خنق تلقائي لكل دومين ───────────────────────────
 
@@ -146,16 +154,17 @@ def parse_retry_after(headers) -> float | None:
 
 # ─────────────────────────── المحركات ───────────────────────────
 
-def fetch_http(url: str, timeout: int) -> tuple[str | None, int | None, str, dict]:
+def fetch_http(url: str, timeout: int, headers: dict | None = None) -> tuple[str | None, int | None, str, dict]:
     """المحرك الثابت: بصمة TLS متصفح + رؤوس حقيقية (الترتيب يولده curl_cffi)"""
     if not FETCHER_OK:
         return None, None, "", {}
+    hdrs = headers or {}
     try:
         session = get_session(urlparse(url).netloc)
         if session is None:
-            page = Fetcher.get(url, stealthy_headers=True, timeout=timeout)
+            page = Fetcher.get(url, stealthy_headers=True, headers=hdrs or None, timeout=timeout)
         else:
-            page = session.get(url, stealthy_headers=True, timeout=timeout)
+            page = session.get(url, stealthy_headers=True, headers=hdrs or None, timeout=timeout)
         html = getattr(page, "html_content", None) or ""
         return html, getattr(page, "status", 200), url, {}
     except Exception as exc:
@@ -175,6 +184,34 @@ def fetch_stealth(url: str, timeout: int) -> tuple[str | None, int | None, str, 
         )
         html = getattr(page, "html_content", None) or ""
         return html, getattr(page, "status", 200), url, {}
+    except Exception as exc:
+        return None, None, str(exc)[:200], {}
+
+def fetch_googlebot(url: str, timeout: int) -> tuple[str | None, int | None, str, dict]:
+    """محاولة بهوية Googlebot — بعض المتاجر تسمح للزاحف الرسمي حيث تحجب غيره"""
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            "Accept": FEED_HEADERS["Accept"],
+            "Accept-Language": "en,ar;q=0.8",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            raw = res.read()
+            try:
+                html = raw.decode("utf-8", errors="replace")
+            except Exception:
+                html = raw.decode("latin-1", errors="replace")
+            return html, res.status, url, {}
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
+        return body, e.code, url, {}
     except Exception as exc:
         return None, None, str(exc)[:200], {}
 
@@ -214,20 +251,29 @@ def engine_ladder(url: str, strategy: str, timeout: int) -> dict:
     THROTTLE.wait(domain)
     order = []
     if strategy == "stealth":
-        order = [fetch_stealth, fetch_http, fetch_urllib]
+        order = [fetch_stealth, fetch_http, fetch_googlebot, fetch_urllib]
     elif STEALTH_READY:
-        order = [fetch_http, fetch_stealth, fetch_urllib]
+        order = [fetch_http, fetch_stealth, fetch_googlebot, fetch_urllib]
     else:
-        # المتصفح غير مثبت → لا تضيّع وقتاً في محاولته (تصعيد مباشر للـ urllib)
-        order = [fetch_http, fetch_urllib]
+        # المتصفح غير مثبت → لا تضيّع وقتاً في محاولته (تصعيد مباشر)
+        order = [fetch_http, fetch_googlebot, fetch_urllib]
+
+    engine_names = {
+        "fetch_http": "http",
+        "fetch_stealth": "stealth",
+        "fetch_googlebot": "googlebot",
+        "fetch_urllib": "urllib",
+    }
 
     for attempt in range(2):  # جولة إعادة كاملة
-        for i, engine in enumerate(order):
-            name = ["http", "stealth", "urllib"][["http", "stealth", "urllib"].index(
-                {"fetch_http": "http", "fetch_stealth": "stealth", "fetch_urllib": "urllib"}[engine.__name__]
-            )]
+        for engine in order:
+            name = engine_names.get(engine.__name__, engine.__name__)
             started = time.time()
-            html, status, err, _ = engine(url, timeout)
+            # محرك http يقبل رؤوس الفيد — البقية رؤوسها مدمجة
+            if engine.__name__ == "fetch_http":
+                html, status, err, _ = engine(url, timeout, FEED_HEADERS)
+            else:
+                html, status, err, _ = engine(url, timeout)
             latency = time.time() - started
             if html is not None and not is_blocked(status, html):
                 THROTTLE.record(domain, True, latency)

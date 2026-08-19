@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { apiClient } from '@/lib/client-api';
 import { Badge, Button, Card, CardHeader, Input, Table } from '@/components/ui';
@@ -38,7 +38,10 @@ function CatalogContent() {
   const [q, setQ] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState('');
   const [error, setError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const selected = clientId || (catalogs && catalogs[0]?.clientId) || '';
 
@@ -120,13 +123,60 @@ function CatalogContent() {
               <option key={c.clientId} value={c.clientId}>{c.clientName}</option>
             ))}
           </select>
-          <Button onClick={sync} disabled={syncing}>{syncing ? 'جارٍ المزامنة...' : '🔄 مزامنة الآن'}</Button>
+          <Button onClick={sync} disabled={syncing || uploading}>{syncing ? 'جارٍ المزامنة...' : '🔄 مزامنة الآن'}</Button>
+          <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={syncing || uploading}>
+            {uploading ? 'جارٍ الرفع...' : '📤 رفع فيد من الجهاز'}
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,.xml,.json,.txt,.rss"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file || !selected) return;
+              if (file.size > 8 * 1024 * 1024) {
+                setUploadMsg('⚠️ حجم الملف يتجاوز 8 ميجابايت');
+                return;
+              }
+              setUploading(true);
+              setUploadMsg('');
+              setSyncMsg('');
+              try {
+                const text = await file.text();
+                const res = await apiClient<any>(`/catalog/${selected}/upload`, { method: 'POST', json: { feed: text } });
+                setUploadMsg(
+                  res.ok
+                    ? `✅ رُفع الفيد وحُلل: ${res.total} منتج — ${res.inserted} جديد · ${res.updated} محدَّث · ${res.unchanged} بلا تغيير`
+                    : `⚠️ ${res.error ?? 'فشل تحليل الفيد'}`
+                );
+                // تحديث الشاشة
+                const [p2, s2] = await Promise.all([
+                  apiClient<ProductRow[]>(`/catalog/${selected}/products?limit=100`),
+                  apiClient<any>(`/catalog/${selected}/stats`),
+                ]);
+                setProducts(p2);
+                setStats(s2);
+                apiClient<CatalogRow[]>('/catalog').then(setCatalogs).catch(() => {});
+              } catch (err) {
+                setUploadMsg(`⚠️ ${(err as Error).message}`);
+              } finally {
+                setUploading(false);
+                if (fileRef.current) fileRef.current.value = '';
+              }
+            }}
+          />
         </div>
       </div>
 
       {syncMsg && (
         <div className={`rounded-xl px-4 py-3 text-xs font-bold ${syncMsg.startsWith('✅') ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}>
           {syncMsg}
+        </div>
+      )}
+      {uploadMsg && (
+        <div className={`rounded-xl px-4 py-3 text-xs font-bold ${uploadMsg.startsWith('✅') ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}>
+          {uploadMsg}
         </div>
       )}
 
@@ -139,7 +189,7 @@ function CatalogContent() {
             <div className="text-[11px] font-bold text-slate-400">حالة المزامنة</div>
             <div className="mt-1">
               <Badge tone={stats.catalog?.syncStatus === 'ok' ? 'green' : stats.catalog?.syncStatus === 'error' ? 'red' : 'amber'}>
-                {stats.catalog?.syncStatus === 'ok' ? 'محدث ✓' : stats.catalog?.syncStatus === 'error' ? 'فشلت' : stats.catalog?.syncStatus ?? '—'}
+                {stats.catalog?.syncStatus === 'ok' ? 'محدث ✓' : stats.catalog?.syncStatus === 'simulated' ? 'محاكاة (أرقام تقريبية)' : stats.catalog?.syncStatus === 'error' ? 'فشلت' : stats.catalog?.syncStatus ?? '—'}
               </Badge>
             </div>
             {stats.catalog?.lastSuccessAt && (

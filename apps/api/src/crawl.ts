@@ -52,6 +52,58 @@ function decompress(buf: Buffer, encoding: string | null): Buffer {
 
 // ─────────────────────────── الجلب المباشر المحسّن ───────────────────────────
 
+/** تنظيف رابط فيد: إزالة كيانات HTML والمسافات (بعض العملاء يلصقون روابط منسوخة من المتصفح) */
+export function sanitizeFeedUrl(url: string): string {
+  let u = url.trim();
+  // إزالة كيانات HTML شائعة
+  u = u.replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&#38;/gi, '&');
+  return u;
+}
+
+/** توليد متغيرات عنوان الفيد — بعض الخوادم تستجيب فقط لنطاق معين (www أو بدونه) أو بروتوكول معين */
+export function buildUrlVariants(url: string): string[] {
+  const clean = sanitizeFeedUrl(url);
+  const variants: string[] = [clean];
+  try {
+    const u = new URL(clean);
+    // إزالة www إن وُجد
+    if (u.hostname.startsWith('www.')) {
+      const noWww = new URL(clean);
+      noWww.hostname = u.hostname.slice(4);
+      variants.push(noWww.toString());
+    } else {
+      // إضافة www
+      const withWww = new URL(clean);
+      withWww.hostname = 'www.' + u.hostname;
+      variants.push(withWww.toString());
+    }
+    // تبديل البروتوكول (بعض الخوادم ترفض https بسياسات قديمة)
+    const protoSwap = new URL(clean);
+    protoSwap.protocol = u.protocol === 'https:' ? 'http:' : 'https:';
+    variants.push(protoSwap.toString());
+  } catch {
+    /* تجاهل — المتغير الأساسي يكفي */
+  }
+  return [...new Set(variants)];
+}
+
+/** رؤوس جلب واقعية لفيدات المنتجات (تعامل كمتجر RSS/CSV) */
+function feedHeaders(): Record<string, string> {
+  const agents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+    'Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0',
+  ];
+  return {
+    'user-agent': agents[Math.floor(Math.random() * agents.length)]!,
+    accept: 'application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, text/csv;q=0.7, */*;q=0.5',
+    'accept-language': 'ar-EG,ar;q=0.9,en;q=0.6',
+    'accept-encoding': 'gzip, deflate',
+    'cache-control': 'no-cache',
+    pragma: 'no-cache',
+  };
+}
+
 export interface DirectFetchResult {
   ok: boolean;
   status: number;
@@ -63,41 +115,37 @@ export interface DirectFetchResult {
 
 export async function fetchDirect(
   url: string,
-  opts?: { timeoutMs?: number; attempts?: number }
+  opts?: { timeoutMs?: number; attempts?: number; tryVariants?: boolean }
 ): Promise<DirectFetchResult> {
   const attempts = opts?.attempts ?? 2;
   const timeoutMs = opts?.timeoutMs ?? 15_000;
+  const variants = opts?.tryVariants === false ? [url] : buildUrlVariants(url);
   let lastError = 'فشل الاتصال';
 
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'user-agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
-          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'accept-language': 'ar-EG,ar;q=0.9,en;q=0.6',
-          'accept-encoding': 'gzip, deflate',
-        },
-        redirect: 'follow',
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      const contentType = res.headers.get('content-type') ?? '';
-      const encoding = res.headers.get('content-encoding');
-      const raw = Buffer.from(await res.arrayBuffer());
-      const buf = decompress(raw, encoding);
-      const text = decodeBuffer(buf, detectCharset(contentType, buf.subarray(0, 4096).toString('latin1')));
-      const blocked = isBlockedResponse(res.status, text);
-      if (blocked && attempt < attempts - 1) {
-        // احترام Retry-After ثم إعادة محاولة بتراجع عشوائي
-        const wait = parseRetryAfter(res.headers) * 1000 || (1000 + Math.random() * 1500) * (attempt + 1);
-        await sleep(wait);
-        continue;
+  for (const variant of variants) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        const res = await fetch(variant, {
+          headers: feedHeaders(),
+          redirect: 'follow',
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        const contentType = res.headers.get('content-type') ?? '';
+        const encoding = res.headers.get('content-encoding');
+        const raw = Buffer.from(await res.arrayBuffer());
+        const buf = decompress(raw, encoding);
+        const text = decodeBuffer(buf, detectCharset(contentType, buf.subarray(0, 4096).toString('latin1')));
+        const blocked = isBlockedResponse(res.status, text);
+        if (blocked && attempt < attempts - 1) {
+          const wait = parseRetryAfter(res.headers) * 1000 || (1000 + Math.random() * 1500) * (attempt + 1);
+          await sleep(wait);
+          continue;
+        }
+        return { ok: res.ok, status: res.status, text, url: res.url, blocked, contentType };
+      } catch (err) {
+        lastError = (err as Error).message;
+        if (attempt < attempts - 1) await sleep(500 + Math.random() * 800);
       }
-      return { ok: res.ok, status: res.status, text, url: res.url, blocked, contentType };
-    } catch (err) {
-      lastError = (err as Error).message;
-      if (attempt < attempts - 1) await sleep(800 + Math.random() * 1200);
     }
   }
   return { ok: false, status: 0, text: '', url, blocked: false, contentType: '', error: lastError } as any;
