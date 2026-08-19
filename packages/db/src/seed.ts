@@ -7,6 +7,17 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { db, id, json, now } from './index.js';
 import type { RoutingPolicy, ThemeConfig } from '@cbd/shared';
+import {
+  KANZ_BOT_ID,
+  KANZ_DESCRIPTION,
+  KANZ_FALLBACK,
+  KANZ_MODEL,
+  KANZ_NAME,
+  KANZ_ROUTING,
+  KANZ_SUGGESTIONS,
+  KANZ_SYSTEM_PROMPT,
+  KANZ_WELCOME,
+} from './kanz.js';
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex');
@@ -36,8 +47,8 @@ const ELSHAWWA_THEME: ThemeConfig = {
   bubbleStyle: 'pill',
   windowMode: 'docked',
   welcomeTitle: 'مجموعة الشوا التجارية',
-  welcomeText: 'أهلاً بيك في الشوا! إزاي نقدر نساعدك النهاردة؟',
-  suggestions: ['سياسة الشحن والاسترجاع', 'فروعنا ومواعيد العمل', 'عروض الصيف', 'تتبع طلبي'],
+  welcomeText: 'يا أهلاً ويا مرحب بيك في بيت الغاليين! 👑 أنا "كنز الشوا"، مساعدك الشخصي النصوح. نورتنا، وقولي بتدور على إيه النهاردة؟',
+  suggestions: KANZ_SUGGESTIONS,
   showBrand: true,
   logoUrl: 'https://elshawwa.com/images/logos/8/elshawwa.png',
   poweredBy: true,
@@ -166,6 +177,7 @@ export async function seedDemo(): Promise<{ seeded: boolean }> {
     ['prv_openrouter', 'claude-sonnet-4-20250514', 200000, 3, 15, 0],
     ['prv_groq', 'llama-3.3-70b-versatile', 131072, 0.59, 0.79, 1],
     ['prv_gemini', 'gemini-2.0-flash', 1048576, 0, 0, 1],
+    ['prv_gemini', KANZ_MODEL, 1048576, 0, 0, 1],
     ['prv_gemini', 'gemma-3-12b-it', 131072, 0, 0, 1],
     ['prv_dmxapi', 'claude-4.1', 200000, 2.4, 12, 0],
     ['prv_dmxapi', 'gpt-4.1-mini', 200000, 0.4, 1.6, 0],
@@ -178,9 +190,23 @@ export async function seedDemo(): Promise<{ seeded: boolean }> {
     );
   }
 
-  // ── بوت الشوا ──
-  const botId = 'bot_elshawwa';
-  const persona = `أنت "مساعد الشوا"، ممثل خدمة عملاء مجموعة الشوا التجارية (elshawwa.com) — متخصصة في المفروشات والملابس والأدوات المنزلية في مصر.
+  // ── بوتات الشوا ──
+  // 1) كنز الشوا — البوت الافتراضي (البياع النصوح)
+  await db.run(
+    `INSERT INTO bots (id, client_id, name, description, persona, language, max_reply_len, forbidden_json, routing_json, active, is_default, welcome_msg, suggestions_json, fallback_msg, created_at)
+     VALUES (?, ?, ?, ?, ?, 'ar', 1400, ?, ?, 1, 1, ?, ?, ?, ?)`,
+    KANZ_BOT_ID, clientId, KANZ_NAME, KANZ_DESCRIPTION, KANZ_SYSTEM_PROMPT,
+    JSON.stringify(['سياسة', 'دين', 'جنس']),
+    JSON.stringify(KANZ_ROUTING),
+    KANZ_WELCOME,
+    JSON.stringify(KANZ_SUGGESTIONS),
+    KANZ_FALLBACK,
+    now()
+  );
+
+  // 2) مساعد الشوا — بوت خدمة العملاء (ثانوي)
+  const supportId = 'bot_elshawwa';
+  const supportPersona = `أنت "مساعد الشوا"، ممثل خدمة عملاء مجموعة الشوا التجارية (elshawwa.com) — متخصصة في المفروشات والملابس والأدوات المنزلية في مصر.
 مهامك: الرد باحتراف ودقة على أسئلة الزوار، مساعدتهم في اختيار المنتجات، والإجابة عن الشحن والاسترجاع والضمان والفروع.
 القواعد:
 1. إجاباتك من قاعدة المعرفة فقط — لا تخترع أسعاراً أو عروضاً أو سياسات.
@@ -190,7 +216,7 @@ export async function seedDemo(): Promise<{ seeded: boolean }> {
 5. لو الزائر بيسأل عن منتجات/أقسام، وجّهه لرابط القسم المناسب على الموقع.
 6. لا تناقش السياسة أو الدين أو مواضيع خارج المتجر — اعتذر بلطف وحوّل للمساعدة.`;
 
-  const routing: RoutingPolicy = {
+  const supportRouting: RoutingPolicy = {
     strategy: 'smart-auto',
     tiers: [
       { model: 'mock/elshawwa-assistant', providerIds: ['prv_mock'], weight: 3, maxTokens: 700, temperature: 0.5 },
@@ -200,21 +226,25 @@ export async function seedDemo(): Promise<{ seeded: boolean }> {
   };
 
   await db.run(
-    `INSERT INTO bots (id, client_id, name, description, persona, language, max_reply_len, forbidden_json, routing_json, active, created_at)
-     VALUES (?, ?, ?, ?, ?, 'ar', 1200, ?, ?, 1, ?)`,
-    botId, clientId, 'مساعد الشوا',
+    `INSERT INTO bots (id, client_id, name, description, persona, language, max_reply_len, forbidden_json, routing_json, active, is_default, welcome_msg, suggestions_json, fallback_msg, created_at)
+     VALUES (?, ?, ?, ?, ?, 'ar', 1200, ?, ?, 1, 0, '', '[]', '', ?)`,
+    supportId, clientId, 'مساعد الشوا',
     'بوت خدمة العملاء والمبيعات لموقع مجموعة الشوا التجارية',
-    persona,
+    supportPersona,
     JSON.stringify(['سياسة', 'دين', 'جنس']),
-    JSON.stringify(routing),
+    JSON.stringify(supportRouting),
     now()
   );
-  for (const k of ELSHAWWA_KNOWLEDGE) {
-    await db.run(
-      `INSERT INTO knowledge_chunks (id, bot_id, title, content, source, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      id('kn'), botId, k.title, k.content, k.source, now()
-    );
+
+  // المعرفة تُربط بالبوتين (سياسات المتجر تخدم البيع النصوح والدعم معاً)
+  for (const botId of [KANZ_BOT_ID, supportId]) {
+    for (const k of ELSHAWWA_KNOWLEDGE) {
+      await db.run(
+        `INSERT INTO knowledge_chunks (id, bot_id, title, content, source, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        id('kn'), botId, k.title, k.content, k.source, now()
+      );
+    }
   }
 
   // ── كتالوج الشوا (الفيد الحي) ──
@@ -230,7 +260,7 @@ export async function seedDemo(): Promise<{ seeded: boolean }> {
   await db.run('INSERT INTO settings (key, value) VALUES (?, ?)', 'site_name', 'Chat Bot Dev');
 
   console.log('✅ Seed demo: admin=' + ADMIN_EMAIL + ' / ' + ADMIN_PASSWORD);
-  console.log('✅ Seed demo: client=elshawwa bot=مساعد الشوا providers=5 models=10');
+  console.log('✅ Seed demo: client=elshawwa bots=كنز الشوا (افتراضي) + مساعد الشوا providers=5 models=11');
   return { seeded: true };
 }
 

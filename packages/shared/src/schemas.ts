@@ -71,6 +71,9 @@ export const botCreateSchema = z.object({
   maxReplyLength: z.number().int().min(100).max(8000).default(1200),
   forbiddenTopics: z.array(z.string().max(100)).default([]),
   active: z.boolean().default(true),
+  welcomeMsg: z.string().max(1200).optional().default(''),
+  suggestions: z.array(z.string().max(200)).max(6).optional().default([]),
+  fallbackMsg: z.string().max(1200).optional().default(''),
 });
 
 export const knowledgeChunkSchema = z.object({

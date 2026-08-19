@@ -9,6 +9,7 @@ import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { migrate, db } from '@cbd/db';
 import { seedDemo } from '@cbd/db/seed';
+import { ensureKanzBot } from './kanz-install.js';
 import { startWorkerAll } from '@cbd/worker-core';
 import { AppModule } from './app.module.js';
 import { config } from './config.js';
@@ -18,6 +19,7 @@ async function bootstrap() {
   // 1) قاعدة البيانات + البذرة
   await migrate();
   if (config.SEED_DEMO) await seedDemo();
+  await ensureKanzBot(); // تثبيت/تحديث شخصية كنز الشوا (idempotent)
 
   const app = await NestFactory.create(AppModule, { logger: ['error', 'warn', 'log'] });
 

@@ -41,6 +41,18 @@ interface Theme {
   handoffEmail?: string;
 }
 
+interface ProductCard {
+  name: string;
+  category: string;
+  price: number;
+  oldPrice: number | null;
+  currency: string;
+  imageUrl: string;
+  productUrl: string;
+  isDeal?: boolean;
+  isBrideEssential?: boolean;
+}
+
 interface Msg {
   id: string;
   role: 'user' | 'assistant';
@@ -48,6 +60,7 @@ interface Msg {
   feedback: 'up' | 'down' | null;
   streaming?: boolean;
   conversationId?: string;
+  products?: ProductCard[];
 }
 
 const w = window.__CBD_WIDGET__ ?? { clientId: 'demo', apiBase: '' };
@@ -186,6 +199,7 @@ function App() {
       let buffer = '';
       let acc = '';
       let convId = '';
+      let doneProducts: ProductCard[] = [];
 
       for (;;) {
         const { done, value } = await reader.read();
@@ -207,6 +221,7 @@ function App() {
               setError(json.message ?? 'حدث خطأ');
             } else if (json.type === 'done') {
               convId = json.conversationId ?? '';
+              doneProducts = Array.isArray(json.products) ? json.products : [];
             }
           } catch {}
         }
@@ -215,7 +230,7 @@ function App() {
         acc
           ? m.map((msg) =>
               msg.id === assistantMsg.id
-                ? { ...msg, content: acc, streaming: false, conversationId: convId || undefined }
+                ? { ...msg, content: acc, streaming: false, conversationId: convId || undefined, products: doneProducts.length ? doneProducts : undefined }
                 : msg
             )
           : m.filter((msg) => msg.id !== assistantMsg.id)
@@ -241,6 +256,23 @@ function App() {
   }
 
   const close = () => window.parent.postMessage({ source: 'cbd-widget', type: 'close' }, '*');
+
+  /** القراءة الصوتية (كنز الشوا): speechSynthesis — ar-EG — rate 0.95 — إزالة علامات التنسيق */
+  function speak(msg: Msg) {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      synth.cancel();
+      const clean = msg.content.replace(/[*_#~`]/g, '').trim();
+      if (!clean) return;
+      const u = new SpeechSynthesisUtterance(clean);
+      u.lang = 'ar-EG';
+      u.rate = 0.95;
+      synth.speak(u);
+    } catch {
+      /* المتصفح لا يدعم القراءة */
+    }
+  }
 
   /** تسجيل نقرة التحويل البشري في العدادات (بدون انتظار) */
   function logHandoff(method: 'whatsapp' | 'phone' | 'email') {
@@ -317,8 +349,36 @@ function App() {
               <div className="cbd-bubble-content">{msg.content}{msg.streaming && <span className="cbd-cursor" />}</div>
               {msg.role === 'assistant' && msg.id !== 'welcome' && !msg.streaming && msg.content && (
                 <div className="cbd-feedback">
+                  <button onClick={() => speak(msg)} title="استمع للرد">🔊</button>
                   <button className={msg.feedback === 'up' ? 'active' : ''} onClick={() => feedback(msg, 'up')}>👍</button>
                   <button className={msg.feedback === 'down' ? 'active' : ''} onClick={() => feedback(msg, 'down')}>👎</button>
+                </div>
+              )}
+              {msg.role === 'assistant' && msg.products && msg.products.length > 0 && (
+                <div className="cbd-products">
+                  {msg.products.map((p, i) => (
+                    <a
+                      key={i}
+                      className="cbd-product-card"
+                      href={p.productUrl || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {p.imageUrl ? (
+                        <img src={p.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      ) : (
+                        <span className="cbd-product-emoji">📦</span>
+                      )}
+                      <span className="cbd-product-info">
+                        <span className="cbd-product-name">{p.name}</span>
+                        <span className="cbd-product-price">
+                          {p.isDeal && ' ⚡ '}{p.price} {p.currency}
+                          {p.oldPrice ? <s>{p.oldPrice}</s> : null}
+                        </span>
+                      </span>
+                    </a>
+                  ))}
                 </div>
               )}
             </div>

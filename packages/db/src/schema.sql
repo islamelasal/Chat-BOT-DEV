@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS bots (
   forbidden_json TEXT NOT NULL DEFAULT '[]',
   routing_json TEXT NOT NULL DEFAULT '{}',
   active INTEGER NOT NULL DEFAULT 1,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  welcome_msg TEXT NOT NULL DEFAULT '',
+  suggestions_json TEXT NOT NULL DEFAULT '[]',
+  fallback_msg TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
 
@@ -218,6 +222,8 @@ CREATE TABLE IF NOT EXISTS catalog_products (
   image_url TEXT NOT NULL DEFAULT '',
   product_url TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
+  is_deal INTEGER NOT NULL DEFAULT 0,            -- ضمن عروض اللقطة
+  is_bride_essential INTEGER NOT NULL DEFAULT 0, -- أساسي في جهاز العروسة
   content_hash TEXT NOT NULL DEFAULT '',        -- بصمة المحتوى للكشف عن التغييرات
   first_seen_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,

@@ -30,7 +30,7 @@ const REPLIES: Array<{ keys: RegExp; reply: string }> = [
   {
     keys: /عروض|عرض|خصومات|خصم|تخفيضات|تخفيض|اوفر|offer|sale/i,
     reply:
-      'عروض الصيف شغالة دلوقتي 🔥 خصومات لحد 50% على تشكيلات مختارة:\n\n1. المفروشات: سرير، حمام، ستائر.\n2. الملابس: حريمي، رجالي، أطفال، بيبي.\n3. الأدوات المنزلية والأجهزة الكهربائية.\n4. مستلزمات الحج والعمرة والمدارس.\n\nتقدر تتصفح العروض من قسم "عروض الصيف" على الموقع.',
+      'عروض اللقطة بتتحسب يا فندم ⚡\n\nشوف المنتجات اللي عليها خصم وظهرتلك تحت — دي لقطات بجد، والغالي تمنه فيه 😉\n\nالخلاصة: العروض بتتغير أول بأول، فاللي عاجبك الحق اطلبه قبل ما يخلص.',
   },
   {
     keys: /سعر|بكام|تكلفة|ثمن|price/i,
@@ -51,6 +51,11 @@ const REPLIES: Array<{ keys: RegExp; reply: string }> = [
     keys: /دفع|كاش|فيزا|payment|pay/i,
     reply:
       'طرق الدفع المتاحة 💳\n\n1. كاش عند الاستلام.\n2. دفع أونلاين ببطاقات مختلفة.\n\nالدفع بيتم في خطوة إتمام الشراء بأمان كامل.',
+  },
+  {
+    keys: /عروسة|جهاز.*عروس|خطوبة|بنتي.*جوز|bride|wedding/i,
+    reply:
+      'مبروك مقدماً يا عروسة! 👰\n\nيا فندم، جهاز العروسة عايز ترتيب صح من الأول: ابدئي بالحلل وأطقم السفرة اللي تعيش العمر، وبعدها المفروشات، وبعدين الأجهزة الكهربائية.\n\nشوفي المنتجات اللي رشحتهالك تحت 👇 وأي حاجة محتارة فيها قوليلي وأنصحك بصراحة من قلبي.',
   },
   {
     keys: /سلام|أهلا|هاي|صباح|مساء|hello|hi|ازيك/i,
@@ -76,20 +81,26 @@ export class MockAdapter implements ProviderAdapter {
     this.wordsPerMin = opts.wordsPerMin ?? 900;
   }
 
-  /** يحلل كتلة 【CATALOG】 المحقونة في رسالة النظام ويعيد منتجات مطابقة لرسالة الزائر */
+  /** يحلل كتلة 【CATALOG】 بصيغة كنز الشوا ويعيد منتجات مطابقة لرسالة الزائر
+   *  السطر: - [SKU: 201] الاسم (القسم): بسعر 799 EGP (بدلاً من 1299 EGP) - الماركة: الشوا - متوفر: متوفر - الرابط: url ⚡/👰 */
   private catalogReply(messages: ChatMessageLite[], userText: string): string | null {
     const system = messages.find((m) => m.role === 'system')?.content ?? '';
-    const idx = system.indexOf('【CATALOG】');
+    const idx = system.indexOf('منتجات الشوا المتاحة حالياً');
     if (idx < 0) return null;
-    const block = system.slice(idx).split('\n').slice(1, 8);
-    const products = block
-      .map((line) => line.trim())
-      .filter((l) => l.startsWith('- '))
-      .map((l) => {
-        const [name, price, currency, category, url, stock] = l.slice(2).split('|');
-        return { name: name ?? '', price: price ?? '', currency: currency ?? 'EGP', category: category ?? '', url: url ?? '', stock: stock ?? 'متوفر' };
-      })
-      .filter((p) => p.name);
+    const block = system.slice(idx).split('\n').slice(1, 10);
+    const re = /^\s*-\s*\[SKU:\s*([^\]]+)\]\s*(.+?)\s*\(([^)]*)\):\s*بسعر\s*([\d.]+)\s*([\w]+)(?:\s*\(بدلاً من\s*([\d.]+)[^)]*\))?\s*-\s*الماركة:\s*([^-]*?)\s*-\s*متوفر:\s*([^-]*?)\s*-\s*الرابط:\s*(\S+)/;
+    const products: Array<{ name: string; price: string; currency: string; category: string; url: string }> = [];
+    for (const line of block) {
+      const m = re.exec(line.trim());
+      if (!m) continue;
+      products.push({
+        name: (m[2] ?? '').trim(),
+        category: (m[3] ?? '').trim(),
+        price: m[4] ?? '',
+        currency: m[5] ?? 'EGP',
+        url: m[9] ?? '',
+      });
+    }
     if (!products.length) return null;
     // اختر المنتج الأكثر تطابقاً مع نص الزائر
     const words = userText.split(/[\s،,؟?]+/).filter((w) => w.length > 2);
@@ -103,15 +114,15 @@ export class MockAdapter implements ProviderAdapter {
     if (best.score <= 0) return null;
     const { p } = best;
     const lines = [
-      `متوفر عندنا ✅`,
+      `متوفر عندنا يا فندم ✅`,
       ``,
       `▎${p.name}`,
       p.category ? `القسم: ${p.category}` : '',
-      `السعر: ${p.price} ${p.currency}${p.stock !== 'متوفر' ? ' (متوفر حالياً بكمية محدودة)' : ''}`,
+      `التمن: ${p.price} ${p.currency} — والغالي تمنه فيه 😉`,
       ``,
-      p.url ? `تقدر تشوف تفاصيله وتطلبه من هنا 👇\n${p.url}` : `تقدر تطلبه من الموقع أو تتصل بينا على 16959.`,
+      p.url ? `ده اللينك بتاعه 👇\n${p.url}` : `تقدر تطلبه من الموقع أو تكلمنا على 16959.`,
       ``,
-      `تحب أقولك عن منتجات مشابهة أو أساعدك بحاجة تانية؟ 😊`,
+      `تحب أقترح عليك حاجة مكملة ليها؟ 🍳`,
     ].filter((l) => l !== '');
     return lines.join('\n');
   }

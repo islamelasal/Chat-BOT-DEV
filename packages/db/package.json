@@ -12,6 +12,10 @@
     "./seed": {
       "types": "./dist/seed.d.ts",
       "default": "./dist/seed.js"
+    },
+    "./seed-kanz": {
+      "types": "./dist/kanz.d.ts",
+      "default": "./dist/kanz.js"
     }
   },
   "scripts": {

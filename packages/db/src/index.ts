@@ -105,7 +105,7 @@ export const db: Db = (() => {
 
 export async function migrate(): Promise<void> {
   const schema = readFileSync(schemaPath(), 'utf8');
-  const version = 3;
+  const version = 4;
   let applied: Row | undefined;
   try {
     applied = await db.get('SELECT version FROM _migrations ORDER BY version DESC LIMIT 1');
@@ -119,10 +119,39 @@ export async function migrate(): Promise<void> {
       .replace(/INTEGER PRIMARY KEY AUTOINCREMENT/g, 'BIGSERIAL PRIMARY KEY')
       .replace(/TEXT PRIMARY KEY/g, 'TEXT PRIMARY KEY');
     await db.exec(pgSchema);
+    // أعمدة الترحيب/الاحتياط للبوتات وأعلام المنتجات — لقواعد الإنتاج القائمة
+    const pgCols = [
+      "ALTER TABLE bots ADD COLUMN IF NOT EXISTS is_default INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE bots ADD COLUMN IF NOT EXISTS welcome_msg TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE bots ADD COLUMN IF NOT EXISTS suggestions_json TEXT NOT NULL DEFAULT '[]'",
+      "ALTER TABLE bots ADD COLUMN IF NOT EXISTS fallback_msg TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE catalog_products ADD COLUMN IF NOT EXISTS is_deal INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE catalog_products ADD COLUMN IF NOT EXISTS is_bride_essential INTEGER NOT NULL DEFAULT 0",
+    ];
+    for (const stmt of pgCols) await db.exec(stmt);
   } else {
     await db.exec(schema);
+    // SQLite: ALTER TABLE ADD COLUMN لا يدعم IF NOT EXISTS — نفحص pragma table_info
+    await ensureColumn('bots', 'is_default', "INTEGER NOT NULL DEFAULT 0");
+    await ensureColumn('bots', 'welcome_msg', "TEXT NOT NULL DEFAULT ''");
+    await ensureColumn('bots', 'suggestions_json', "TEXT NOT NULL DEFAULT '[]'");
+    await ensureColumn('bots', 'fallback_msg', "TEXT NOT NULL DEFAULT ''");
+    await ensureColumn('catalog_products', 'is_deal', "INTEGER NOT NULL DEFAULT 0");
+    await ensureColumn('catalog_products', 'is_bride_essential', "INTEGER NOT NULL DEFAULT 0");
   }
   await db.run('INSERT INTO _migrations (version, applied_at) VALUES (?, ?)', version, Date.now());
+}
+
+/** إضافة عمود لجدول SQLite إن لم يكن موجوداً (ترحيلات لاحقة على قواعد حية) */
+async function ensureColumn(table: string, column: string, ddl: string): Promise<void> {
+  try {
+    const cols = await db.all(`PRAGMA table_info(${table})`) as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === column)) {
+      await db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+    }
+  } catch {
+    /* الجدول غير موجود بعد — schema.sql سينشئه بالأعمدة الكاملة */
+  }
 }
 
 // ─────────────────────────────── كاش TTL (ذاكرة / Redis) ───────────────────────────────

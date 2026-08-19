@@ -34,7 +34,7 @@ export interface ChatStreamResult {
 
 @Injectable()
 export class GatewayService {
-  constructor(private readonly catalog: CatalogService) {}
+  constructor(readonly catalog: CatalogService) {}
 
   /** حالة مشتركة لكل العملية — النبضات تسجل فيها وهي نفسها التي يقرأها الراوتر */
   readonly breakers = new CircuitBreaker({
@@ -121,18 +121,10 @@ export class GatewayService {
     const knowledge = await this.retrieveKnowledge(ctx.bot.id, userMessage);
     const page = ctx.page;
 
-    // منتجات الكتالوج الحي المطابقة لرسالة الزائر — يرد البوت بالسعر والرابط الفعليين
+    // كتلة كتالوج كنز الشوا (أول 8 منتجات بصيغة الاستشهاد) — يرد البوت بالأسعار والروابط الفعلية
     let catalogBlock = '';
     try {
-      const products = await this.catalog.searchForBot(ctx.clientId, userMessage, 5);
-      if (products.length) {
-        const lines = products.map((p) =>
-          `- ${p.name}|${p.price}|${p.currency}|${p.category}|${p.productUrl}|${p.inStock ? 'متوفر' : 'نفد'}`
-        );
-        catalogBlock =
-          `【CATALOG】منتجات حية من كتالوج المتجر مطابقة لسؤال الزائر (استخدمها في إجابتك مع السعر والرابط — لا تخترع أسعاراً):\n` +
-          lines.join('\n');
-      }
+      catalogBlock = await this.catalog.buildKanzCatalogBlock(ctx.clientId);
     } catch {
       /* الكتالوج اختياري */
     }

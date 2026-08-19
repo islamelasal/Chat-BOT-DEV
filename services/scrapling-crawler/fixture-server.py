@@ -4,7 +4,7 @@ import gzip
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-CSV_UTF8 = 'id,name,category,price,list_price,url,image\n201,"لحاف قطن ملكي 240×260","المفروشات",799,1299,"https://elshawwa.com/p/201","https://elshawwa.com/i/201.jpg"\n202,"طقم سفرة 24 قطعة","الأدوات المنزلية",649,850,"https://elshawwa.com/p/202","https://elshawwa.com/i/202.jpg"\n203,"عباية صيفي حريمي","الملابس",399,0,"https://elshawwa.com/p/203","https://elshawwa.com/i/203.jpg"\n'
+CSV_UTF8 = 'id,name,category,price,list_price,url,image,is_deal,is_bride_essential\n201,"لحاف قطن ملكي 240×260","المفروشات",799,1299,"https://elshawwa.com/p/201","https://elshawwa.com/i/201.jpg",1,0\n202,"طقم سفرة 24 قطعة","الأدوات المنزلية",649,850,"https://elshawwa.com/p/202","https://elshawwa.com/i/202.jpg",0,1\n203,"عباية صيفي حريمي","الملابس",399,0,"https://elshawwa.com/p/203","https://elshawwa.com/i/203.jpg",1,1\n'
 
 # نفس الفيد بترميز windows-1256 (عربي قديم)
 CSV_CP1256 = CSV_UTF8.encode('windows-1256', errors='replace')

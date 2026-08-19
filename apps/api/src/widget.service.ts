@@ -26,6 +26,12 @@ export interface WidgetPublicConfig {
   clientName: string;
   theme: ThemeConfig;
   language: string;
+  bot: {
+    name: string;
+    welcomeMsg: string;
+    suggestions: string[];
+    fallbackMsg: string;
+  };
 }
 
 const DEFAULT_THEME: ThemeConfig = {
@@ -68,17 +74,32 @@ export class WidgetService {
   async getPublicConfig(clientId: string): Promise<WidgetPublicConfig | null> {
     const client = await db.get('SELECT * FROM clients WHERE id = ? AND status != ?', clientId, 'suspended') as any;
     if (!client) return null;
-    const bot = await db.get('SELECT * FROM bots WHERE client_id = ? AND active = 1 ORDER BY created_at ASC LIMIT 1', clientId) as any;
+    const bot = await db.get(
+      'SELECT * FROM bots WHERE client_id = ? AND active = 1 ORDER BY is_default DESC, created_at ASC LIMIT 1',
+      clientId
+    ) as any;
     if (!bot) return null;
     const theme = { ...DEFAULT_THEME, ...json<Partial<ThemeConfig>>(client.theme_json, {}) };
     const brand = json<{ logoUrl: string | null }>(client.brand_json, { logoUrl: null });
     if (brand.logoUrl) theme.logoUrl = brand.logoUrl;
+    // شخصية البوت تتقدم على الثيم في الترحيب والاقتراحات (فصل الهوية عن الشكل)
+    const welcomeMsg = String(bot.welcome_msg ?? '');
+    const suggestions = json<string[]>(bot.suggestions_json, []);
+    if (welcomeMsg) theme.welcomeText = welcomeMsg;
+    if (suggestions.length) theme.suggestions = suggestions;
+    theme.welcomeTitle = String(bot.name ?? theme.welcomeTitle);
     return {
       clientId,
       botId: String(bot.id),
       clientName: String(client.name),
       theme,
       language: String(bot.language ?? 'ar'),
+      bot: {
+        name: String(bot.name ?? ''),
+        welcomeMsg,
+        suggestions,
+        fallbackMsg: String(bot.fallback_msg ?? ''),
+      },
     };
   }
 

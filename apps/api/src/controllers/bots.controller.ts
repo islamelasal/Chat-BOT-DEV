@@ -37,6 +37,10 @@ async function botRowToBot(r: any) {
     })),
     routing: json<any>(r.routing_json, { strategy: 'priority-failover', tiers: [] }),
     active: Number(r.active) === 1,
+    isDefault: Number(r.is_default) === 1,
+    welcomeMsg: String(r.welcome_msg ?? ''),
+    suggestions: json<string[]>(r.suggestions_json, []),
+    fallbackMsg: String(r.fallback_msg ?? ''),
     createdAt: Number(r.created_at),
   };
 }

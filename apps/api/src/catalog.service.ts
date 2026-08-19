@@ -27,6 +27,8 @@ export interface NormalizedProduct {
   imageUrl: string;
   productUrl: string;
   description: string;
+  isDeal: boolean;
+  isBride: boolean;
 }
 
 export interface SyncSummary {
@@ -56,6 +58,8 @@ const HEADER_ALIASES: Record<string, string[]> = {
   description: ['description', 'desc', 'details', 'short description', 'الوصف'],
   currency: ['currency', 'العملة'],
   inStock: ['in stock', 'instock', 'stock', 'available', 'availability', 'متوفر'],
+  isDeal: ['is_deal', 'isdeal', 'deal', 'عرض خاص', 'عرض'],
+  isBride: ['is_bride_essential', 'isbride', 'bride', 'bride_essential', 'عروسة', 'جهاز العروسة'],
 };
 
 @Injectable()
@@ -254,6 +258,11 @@ export class CatalogService {
     const inStock = !(
       stockStr.includes('out') || stockStr.includes('no') || stockStr.includes('0') || stockStr.includes('غير')
     );
+    const flag = (v: string | undefined): boolean => {
+      if (!v) return false;
+      const t = v.trim().toLowerCase();
+      return ['1', 'true', 'yes', 'y', 'نعم', 'متاح'].includes(t);
+    };
     return {
       externalId,
       name: name.slice(0, 300),
@@ -266,12 +275,14 @@ export class CatalogService {
       imageUrl: (row.imageUrl ?? '').slice(0, 500),
       productUrl: (row.productUrl ?? '').slice(0, 500),
       description: (row.description ?? '').slice(0, 2000),
+      isDeal: flag(row.isDeal),
+      isBride: flag(row.isBride),
     };
   }
 
   private hashOf(p: NormalizedProduct): string {
     return createHash('sha256')
-      .update([p.name, p.category, p.brand, p.price, p.oldPrice ?? '', p.inStock ? 1 : 0, p.imageUrl, p.productUrl, p.description.slice(0, 500)].join('\u0001'))
+      .update([p.name, p.category, p.brand, p.price, p.oldPrice ?? '', p.inStock ? 1 : 0, p.imageUrl, p.productUrl, p.description.slice(0, 500), p.isDeal ? 1 : 0, p.isBride ? 1 : 0].join('\u0001'))
       .digest('hex');
   }
 
@@ -310,10 +321,11 @@ export class CatalogService {
           await db.run(
             `INSERT INTO catalog_products
               (id, client_id, external_id, name, category, brand, price, old_price, currency, in_stock,
-               image_url, product_url, description, content_hash, first_seen_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               image_url, product_url, description, is_deal, is_bride_essential, content_hash, first_seen_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             id('prd'), clientId, p.externalId, p.name, p.category, p.brand, p.price, p.oldPrice,
-            p.currency, p.inStock ? 1 : 0, p.imageUrl, p.productUrl, p.description, hash, now(), now()
+            p.currency, p.inStock ? 1 : 0, p.imageUrl, p.productUrl, p.description,
+            p.isDeal ? 1 : 0, p.isBride ? 1 : 0, hash, now(), now()
           );
           await this.logChange(clientId, p.externalId, 'new', `أُضيف: ${p.name}`);
           summary.inserted++;
@@ -323,10 +335,12 @@ export class CatalogService {
           await db.run(
             `UPDATE catalog_products SET
                name = ?, category = ?, brand = ?, price = ?, old_price = ?, currency = ?, in_stock = ?,
-               image_url = ?, product_url = ?, description = ?, content_hash = ?, updated_at = ?
+               image_url = ?, product_url = ?, description = ?, is_deal = ?, is_bride_essential = ?,
+               content_hash = ?, updated_at = ?
              WHERE client_id = ? AND external_id = ?`,
             p.name, p.category, p.brand, p.price, p.oldPrice, p.currency, p.inStock ? 1 : 0,
-            p.imageUrl, p.productUrl, p.description, hash, now(), clientId, p.externalId
+            p.imageUrl, p.productUrl, p.description, p.isDeal ? 1 : 0, p.isBride ? 1 : 0,
+            hash, now(), clientId, p.externalId
           );
           const type = priceChanged ? 'price_changed' : stockChanged ? 'stock_changed' : 'updated';
           const details = priceChanged
@@ -483,9 +497,98 @@ export class CatalogService {
       imageUrl: String(r.image_url),
       productUrl: String(r.product_url),
       description: String(r.description),
+      isDeal: Number(r.is_deal) === 1,
+      isBrideEssential: Number(r.is_bride_essential) === 1,
       firstSeenAt: Number(r.first_seen_at),
       updatedAt: Number(r.updated_at),
     };
+  }
+
+  /** أول N منتجات متوفرة — سياق التأريض لبوت كنز الشوا (مواصفة العميل: أول 8) */
+  async firstProducts(clientId: string, limit = 8): Promise<Array<ReturnType<CatalogService['productRow']>>> {
+    const rows = (await db.all(
+      'SELECT * FROM catalog_products WHERE client_id = ? AND in_stock = 1 ORDER BY name ASC LIMIT ?',
+      clientId, limit
+    )) as any[];
+    return rows.map((r) => this.productRow(r));
+  }
+
+  /** صيغة كنز الشوا لسطر المنتج داخل الموجه:
+   *  - [SKU: {id}] {title} ({category}): بسعر {price} ج.م (بدلاً من {oldPrice} ج.م) - الماركة: {brand} */
+  kanzLine(p: ReturnType<CatalogService['productRow']>): string {
+    const old = p.oldPrice && p.oldPrice > p.price ? ` (بدلاً من ${p.oldPrice} ${p.currency})` : '';
+    const flags = [p.isDeal ? ' ⚡ عرض لقطة' : '', p.isBrideEssential ? ' 👰 أساسي لجهاز العروسة' : ''].join('');
+    return `- [SKU: ${p.externalId}] ${p.name} (${p.category || 'عام'}): بسعر ${p.price} ${p.currency}${old} - الماركة: ${p.brand || 'الشوا'} - متوفر: متوفر - الرابط: ${p.productUrl || 'https://elshawwa.com'}${flags}`;
+  }
+
+  /** كتلة كتالوج كنز الشوا الكاملة (أول 8 منتجات) — تُحقن في رسالة النظام */
+  async buildKanzCatalogBlock(clientId: string): Promise<string> {
+    const products = await this.firstProducts(clientId, 8);
+    if (!products.length) return '';
+    return (
+      'منتجات الشوا المتاحة حالياً في المخزن الرقمي للاستشهاد بها أثناء النصيحة:\n' +
+      products.map((p) => this.kanzLine(p)).join('\n')
+    );
+  }
+
+  /**
+   * خوارزمية عرض المنتجات الموصى بها (مواصفة كنز الشوا) — منتجان أسفل الإجابة عند تحقق:
+   * - رسالة العميل تحتوي اسم فئة المنتج
+   * - رد البوت يحتوي عنوان المنتج
+   * - "عروسة" + isBrideEssential  |  "عروض" + isDeal  |  اسم الماركة
+   */
+  async matchProducts(
+    clientId: string,
+    userMessage: string,
+    botReply: string,
+    limit = 2
+  ): Promise<Array<ReturnType<CatalogService['productRow']>>> {
+    const rows = (await db.all(
+      'SELECT * FROM catalog_products WHERE client_id = ? AND in_stock = 1 LIMIT 500',
+      clientId
+    )) as any[];
+    if (!rows.length) return [];
+
+    const userLower = userMessage.toLowerCase();
+    const replyLower = botReply.toLowerCase();
+    const hasBride = /عروس|جهاز.*عرو/.test(userMessage);
+    const hasDeal = /عرض|خصم|لقطة|تخفيض/.test(userMessage);
+
+    const scored = rows
+      .map((r) => {
+        const p = this.productRow(r);
+        const nameL = p.name.toLowerCase();
+        const catL = p.category.toLowerCase();
+        const brandL = p.brand.toLowerCase();
+        let score = 0;
+        const reasons: string[] = [];
+        if (catL && userLower.includes(catL.slice(0, 6))) {
+          score += 3;
+          reasons.push('فئة في رسالة العميل');
+        }
+        if (replyLower.includes(nameL.slice(0, 8))) {
+          score += 3;
+          reasons.push('عنوان في رد البوت');
+        }
+        if (hasBride && p.isBrideEssential) {
+          score += 4;
+          reasons.push('عروسة + أساسي');
+        }
+        if (hasDeal && p.isDeal) {
+          score += 4;
+          reasons.push('عروض + لقطة');
+        }
+        if (brandL && userLower.includes(brandL)) {
+          score += 3;
+          reasons.push('الماركة');
+        }
+        return { p, score, reasons };
+      })
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+
+    return scored.map((s) => s.p);
   }
 
   /** استرجاع منتجات تطابق كلمات الرسالة — يغذي ذكاء البوت من الفيد الحي */

@@ -147,6 +147,7 @@ export class WidgetController {
       active: true,
       createdAt: Number(botRow.created_at),
     };
+    const botFallback = String(botRow.fallback_msg ?? '');
 
     const result = await this.gateway.chat(
       { bot, clientId: sess.cid, history, page },
@@ -163,6 +164,7 @@ export class WidgetController {
     let assistantText = '';
     let errored = false;
     let assistantMsgId: string | null = null;
+    let products: any[] = [];
     try {
       for await (const chunk of result.stream) {
         if (res.writableEnded || res.destroyed) break;
@@ -171,15 +173,53 @@ export class WidgetController {
           res.write(`data: ${JSON.stringify({ type: 'delta', text: chunk.text })}\n\n`);
         } else if (chunk.type === 'error') {
           errored = true;
-          res.write(`data: ${JSON.stringify({ type: 'error', message: chunk.message })}\n\n`);
         }
       }
+
+      // الرد الاحتياطي للشخصية (مواصفة كنز الشوا) عند انقطاع النموذج
+      if (!assistantText && errored && botFallback) {
+        assistantText = botFallback;
+        for (const word of botFallback.split(/(\s+)/)) {
+          if (res.writableEnded || res.destroyed) break;
+          res.write(`data: ${JSON.stringify({ type: 'delta', text: word })}\n\n`);
+        }
+        errored = false;
+      }
+
       if (!errored && assistantText) {
         const msg = await this.widgets.appendMessage(conv, 'assistant', assistantText);
         assistantMsgId = msg.id;
       }
+
+      // خوارزمية المنتجات الموصى بها: منتجان مطابقان أسفل الإجابة (أو أول منتجين عند الاحتياطي)
+      try {
+        const matched = await this.gateway.catalog.matchProducts(sess.cid, message, assistantText, 2);
+        if (matched.length) {
+          products = matched;
+        } else if (assistantText === botFallback) {
+          products = await this.gateway.catalog.firstProducts(sess.cid, 2);
+        }
+      } catch {
+        /* الكتالوج اختياري */
+      }
+
       res.write(
-        `data: ${JSON.stringify({ type: 'done', conversationId: conv.id, assistantMessageId: assistantMsgId })}\n\n`
+        `data: ${JSON.stringify({
+          type: 'done',
+          conversationId: conv.id,
+          assistantMessageId: assistantMsgId,
+          products: products.map((p) => ({
+            name: p.name,
+            category: p.category,
+            price: p.price,
+            oldPrice: p.oldPrice,
+            currency: p.currency,
+            imageUrl: p.imageUrl,
+            productUrl: p.productUrl,
+            isDeal: p.isDeal,
+            isBrideEssential: p.isBrideEssential,
+          })),
+        })}\n\n`
       );
     } catch (err) {
       res.write(`data: ${JSON.stringify({ type: 'error', message: (err as Error).message })}\n\n`);
