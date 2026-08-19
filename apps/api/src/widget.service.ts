@@ -32,6 +32,11 @@ export interface WidgetPublicConfig {
     suggestions: string[];
     fallbackMsg: string;
   };
+  bride: {
+    budget: number;
+    defaults: Array<{ key: string; title: string; tag: string; found: boolean; price: number; oldPrice: number | null; currency: string; productUrl: string }>;
+    products: Array<{ name: string; category: string; price: number; oldPrice: number | null; currency: string; imageUrl: string; productUrl: string; isDeal: boolean; isBrideEssential: boolean }>;
+  };
 }
 
 const DEFAULT_THEME: ThemeConfig = {
@@ -100,6 +105,7 @@ export class WidgetService {
         suggestions,
         fallbackMsg: String(bot.fallback_msg ?? ''),
       },
+      bride: { budget: 65000, defaults: [], products: [] }, // تُستكمل من المتحكم (كتالوج حي)
     };
   }
 

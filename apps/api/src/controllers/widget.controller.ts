@@ -65,6 +65,24 @@ export class WidgetController {
   async config(@Param('clientId') clientId: string) {
     const cfg = await this.widgets.getPublicConfig(clientId);
     if (!cfg) throw new BadRequestException('عميل غير موجود أو موقوف');
+    // حاسبة العروسة: الأساسيات بأسعارها الحقيقية + منتجات العروسة المتوفرة
+    try {
+      const [defaults, products] = await Promise.all([
+        this.gateway.catalog.resolveBrideDefaults(clientId),
+        this.gateway.catalog.getBrideEssentials(clientId, 8),
+      ]);
+      cfg.bride = {
+        budget: 65000,
+        defaults,
+        products: products.map((p) => ({
+          name: p.name, category: p.category, price: p.price, oldPrice: p.oldPrice,
+          currency: p.currency, imageUrl: p.imageUrl, productUrl: p.productUrl,
+          isDeal: p.isDeal, isBrideEssential: p.isBrideEssential,
+        })),
+      };
+    } catch {
+      /* الكتالوج اختياري */
+    }
     return cfg;
   }
 

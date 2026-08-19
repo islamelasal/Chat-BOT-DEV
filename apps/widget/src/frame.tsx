@@ -63,6 +63,23 @@ interface Msg {
   products?: ProductCard[];
 }
 
+interface BrideDefault {
+  key: string;
+  title: string;
+  tag: string;
+  found: boolean;
+  price: number;
+  oldPrice: number | null;
+  currency: string;
+  productUrl: string;
+}
+
+interface BrideData {
+  budget: number;
+  defaults: BrideDefault[];
+  products: ProductCard[];
+}
+
 const w = window.__CBD_WIDGET__ ?? { clientId: 'demo', apiBase: '' };
 const API = w.apiBase || '';
 
@@ -120,6 +137,9 @@ function App() {
   const [leadBusy, setLeadBusy] = useState(false);
   const [leadError, setLeadError] = useState('');
   const [handoffOpen, setHandoffOpen] = useState(false);
+  const [bride, setBride] = useState<BrideData | null>(null);
+  const [brideOpen, setBrideOpen] = useState(false);
+  const [brideSelected, setBrideSelected] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -130,6 +150,11 @@ function App() {
         setCfg(json);
         if (json.theme?.welcomeText) {
           setMessages([{ id: 'welcome', role: 'assistant', content: json.theme.welcomeText, feedback: null }]);
+        }
+        if (json.bride) {
+          setBride(json.bride);
+          // العناصر المحددة مسبقاً تكون مختارة افتراضياً (مواصفة الحاسبة)
+          setBrideSelected(new Set(json.bride.defaults.filter((d: BrideDefault) => d.found).map((d: BrideDefault) => d.key)));
         }
       })
       .catch(() => setError('تعذر تحميل البوت — تأكد من اتصالك'));
@@ -435,6 +460,87 @@ function App() {
                 </button>
                 <button className="cbd-lead-cancel" onClick={() => setLeadOpen(false)}>إلغاء</button>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* حاسبة ميزانية العروسة (كنز الشوا v2) */}
+      {bride && (
+        <div className="cbd-lead">
+          {!brideOpen ? (
+            <button className="cbd-lead-btn" onClick={() => setBrideOpen(true)}>
+              👰 حاسبة ميزانية العروسة — {bride.budget.toLocaleString('ar-EG')} ج.م
+            </button>
+          ) : (
+            <div className="cbd-lead-form">
+              <div className="cbd-lead-title">👰 حاسبة جهاز العروسة</div>
+              <div className="cbd-bride-budget">
+                <span>الميزانية</span>
+                <b>{bride.budget.toLocaleString('ar-EG')} ج.م</b>
+              </div>
+              {(() => {
+                const toggle = (key: string) => {
+                  setBrideSelected((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  });
+                };
+                const selectedDefaults = bride.defaults.filter((d) => d.found && brideSelected.has(d.key));
+                const selectedProducts = bride.products.filter((p, i) => brideSelected.has('p' + i));
+                const allItems = [
+                  ...selectedDefaults.map((d) => ({ name: d.title, price: d.price, oldPrice: d.oldPrice, currency: d.currency })),
+                  ...selectedProducts.map((p) => ({ name: p.name, price: p.price, oldPrice: p.oldPrice, currency: p.currency })),
+                ];
+                const total = allItems.reduce((a, x) => a + (x.price || 0), 0);
+                const saved = allItems.reduce((a, x) => a + (x.oldPrice && x.oldPrice > x.price ? x.oldPrice - x.price : 0), 0);
+                const remaining = bride.budget - total;
+                return (
+                  <>
+                    <div className="cbd-bride-section">الأساسيات المحددة مسبقاً:</div>
+                    {bride.defaults.map((d) => (
+                      <label key={d.key} className="cbd-bride-item">
+                        <input type="checkbox" disabled={!d.found} checked={d.found && brideSelected.has(d.key)} onChange={() => toggle(d.key)} />
+                        <span className="cbd-bride-info">
+                          <span className="cbd-bride-name">{d.title} {d.tag && <em>{d.tag}</em>}</span>
+                          <span className="cbd-bride-price">
+                            {d.found ? `${d.price.toLocaleString('ar-EG')} ${d.currency}` : 'من الكتالوج'}
+                            {d.oldPrice ? <s>{d.oldPrice.toLocaleString('ar-EG')}</s> : null}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                    {bride.products.length > 0 && (
+                      <>
+                        <div className="cbd-bride-section">منتجات عروسة من الكتالوج (اختيارك):</div>
+                        {bride.products.slice(0, 5).map((p, i) => (
+                          <label key={i} className="cbd-bride-item">
+                            <input type="checkbox" checked={brideSelected.has('p' + i)} onChange={() => toggle('p' + i)} />
+                            <span className="cbd-bride-info">
+                              <span className="cbd-bride-name">{p.name}</span>
+                              <span className="cbd-bride-price">
+                                {p.price.toLocaleString('ar-EG')} {p.currency}
+                                {p.oldPrice ? <s>{p.oldPrice.toLocaleString('ar-EG')}</s> : null}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                      </>
+                    )}
+                    <div className="cbd-bride-totals">
+                      <div><span>الإجمالي المختار</span><b>{total.toLocaleString('ar-EG')} ج.م</b></div>
+                      <div><span>الخصومات</span><b className="cbd-bride-saved">− {saved.toLocaleString('ar-EG')} ج.م</b></div>
+                      <div className={remaining >= 0 ? 'cbd-bride-ok' : 'cbd-bride-over'}>
+                        <span>{remaining >= 0 ? 'المتبقي من الميزانية' : 'تجاوز الميزانية'}</span>
+                        <b>{Math.abs(remaining).toLocaleString('ar-EG')} ج.م</b>
+                      </div>
+                    </div>
+                    <button className="cbd-lead-cancel" onClick={() => setBrideOpen(false)}>إغلاق الحاسبة</button>
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>

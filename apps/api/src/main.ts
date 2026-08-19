@@ -10,6 +10,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { migrate, db } from '@cbd/db';
 import { seedDemo } from '@cbd/db/seed';
 import { ensureKanzBot } from './kanz-install.js';
+import { ensureProviderKeys } from './provider-keys.js';
 import { startWorkerAll } from '@cbd/worker-core';
 import { AppModule } from './app.module.js';
 import { config } from './config.js';
@@ -20,6 +21,7 @@ async function bootstrap() {
   await migrate();
   if (config.SEED_DEMO) await seedDemo();
   await ensureKanzBot(); // تثبيت/تحديث شخصية كنز الشوا (idempotent)
+  await ensureProviderKeys(); // تثبيت مفاتيح المزودين من بيئة التشغيل (مشفرة)
 
   const app = await NestFactory.create(AppModule, { logger: ['error', 'warn', 'log'] });
 

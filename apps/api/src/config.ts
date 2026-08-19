@@ -28,6 +28,8 @@ const envSchema = z.object({
   // مزامنة كتالوجات العملاء (الفيد الحي) — كل 6 ساعات + مزامنة أولى عند الإقلاع
   CATALOG_SYNC_INTERVAL_MS: z.coerce.number().default(21600000),
   CATALOG_SYNC_ON_BOOT: z.coerce.boolean().default(true),
+  // مفتاح OpenRouter (اختياري — يُثبَّت مشفراً في المزود عند الإقلاع إن لم يكن مثبتاً)
+  OPENROUTER_API_KEY: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);
