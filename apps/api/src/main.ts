@@ -102,6 +102,10 @@ async function bootstrap() {
     Logger.log('👷 العامل الخلفي يعمل داخل العملية (نبضات + Dead-Man Switch + تنظيف)', 'Worker');
   }
 
+  // 4.5) معالج Webhooks الصادرة — يعمل دائماً حتى واللوحة مغلقة
+  const { WebhooksService } = require('./webhooks.service.js') as typeof import('./webhooks.service.js');
+  app.get(WebhooksService).startPolling();
+
   // 5) جدولة مزامنة كتالوجات العملاء (الفيد الحي) — تعمل دائماً حتى واللوحة مغلقة
   const { CatalogService } = require('./catalog.service.js') as typeof import('./catalog.service.js');
   const catalogService = app.get(CatalogService);

@@ -245,3 +245,53 @@ CREATE TABLE IF NOT EXISTS catalog_changes (
 CREATE INDEX IF NOT EXISTS idx_catprod_client ON catalog_products (client_id, category);
 CREATE INDEX IF NOT EXISTS idx_catprod_name ON catalog_products (client_id, name);
 CREATE INDEX IF NOT EXISTS idx_catchange_client ON catalog_changes (client_id, created_at);
+
+-- نقاط Webhook الصادرة لكل عميل (Zapier / Google Sheets / أي CRM)
+CREATE TABLE IF NOT EXISTS webhook_endpoints (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL,
+  secret TEXT NOT NULL DEFAULT '',
+  events_json TEXT NOT NULL DEFAULT '[]',
+  active INTEGER NOT NULL DEFAULT 1,
+  last_status TEXT NOT NULL DEFAULT '',          -- ok | error | (فارغ = لم يُجرَّب)
+  last_status_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_whend_client ON webhook_endpoints (client_id, active);
+
+-- عمليات تسليم Webhook: محاولات + إعادة بتراجع أسي + سجل أخطاء كامل
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  event TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',        -- pending | sending | success | failed | dead
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at INTEGER NOT NULL,
+  response_code INTEGER,
+  response_body TEXT NOT NULL DEFAULT '',
+  error TEXT NOT NULL DEFAULT '',
+  duration_ms INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_whdel_due ON webhook_deliveries (status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_whdel_endpoint ON webhook_deliveries (endpoint_id, created_at);
+
+-- الأسئلة غير المجابة (لتحسين قاعدة المعرفة) — تطبيع عربي لمنع التكرارات
+CREATE TABLE IF NOT EXISTS unanswered_questions (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  bot_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  normalized_q TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'open',           -- open | resolved
+  first_at INTEGER NOT NULL,
+  last_at INTEGER NOT NULL,
+  UNIQUE (client_id, bot_id, normalized_q)
+);
+CREATE INDEX IF NOT EXISTS idx_unansw_client ON unanswered_questions (client_id, status, count);

@@ -214,11 +214,24 @@ erDiagram
 | Bots | `CRUD /bots` `PUT /bots/:id/persona` `POST /bots/:id/knowledge` `PUT /bots/:id/routing` |
 | Themes | `GET/PUT /clients/:id/theme` `GET /clients/:id/snippet` |
 | Providers | `CRUD /providers` `POST /providers/:id/test` `POST /providers/:id/refresh-models` |
-| Status | `GET /status/heartbeats` `GET /status/circuits` `GET /healthz` |
-| Usage | `GET /usage/summary` `GET /usage/series` `GET /usage/reconciliation` |
+| Status | `GET /status/heartbeats` `GET /status/circuits` `GET /w/healthz` |
+| Usage | `GET /usage/summary` `GET /usage/series` `GET /usage/reconciliation` `GET /usage/unanswered` `POST /usage/unanswered/:id/resolve` |
 | Conversations | `GET /conversations` `GET /conversations/:id` `POST /conversations/:id/reply` |
-| Widget (عام) | `GET /w/config/:client` `POST /w/session` `POST /w/chat` (SSE) `POST /w/feedback` |
-| Webhooks (لاحقاً) | `POST /webhooks/:client/:event` (HMAC) |
+| Widget (عام) | `GET /w/config/:client` `POST /w/session` `POST /w/chat` (SSE) `POST /w/feedback` `POST /w/lead` `POST /w/handoff` `POST /w/order` |
+| Webhooks (صادر) | `GET/POST /clients/:id/webhooks` `PATCH/DELETE …/:id` `POST …/:id/test` `POST …/:id/reveal` `GET …/:id/deliveries` `POST …/deliveries/:deliveryId/retry` |
+
+### 6.1 محرك Webhooks الصادرة (الموثوقية أولاً)
+
+- **الإيداع Fire-and-Forget**: كل حدث (lead/رسالة/تحويل/تتبع طلب/مزامنة كتالوج) يُكتب في جدول `webhook_deliveries` فوراً ولا يمس زمن رد الودجت إطلاقاً.
+- **معالجة دورية** (كل 15 ثانية + kick فوري عند الإيداع) بادّعاء متفائل: `UPDATE … WHERE id = ? AND status IN (…) AND next_attempt_at <= ?` — آمن حتى مع عاملين، مع **استعادة الصفوف العالقة في `sending`** بعد انهيار عملية (سلامة ضد الأعطال).
+- **إعادة المحاولة بتراجع أسي**: 30ث → 2د → 10د → 1س → 6س (حتى 5 محاولات) ثم `dead` مع سجل أخطاء كامل.
+- **التوقيع**: `X-CBD-Signature: sha256=HMAC(secret, "{ts}.{body}")` + `X-CBD-Signature-Timestamp` — يتحقق منه Zapier/Sheets برمجياً.
+- **الأمان**: حماية SSRF (منع العناوين الخاصة في الإنتاج عبر `WEBHOOK_ALLOW_PRIVATE=false`) + مهلة 8 ثوانٍ + سقف 256KB للرزمة + سر يُكشف فقط بطلب مُدقَّق.
+- **الأحداث**: `lead.created` · `conversation.message` · `handoff.requested` · `order.tracked` · `catalog.synced` · `webhook.test`.
+
+### 6.2 الأسئلة غير المجابة
+
+عند استخدام الرد الاحتياطي (فشل/انقطاع النموذج) يُسجَّل السؤال بتطبيع عربي (تشكيل/همزات/ألفويات) في `unanswered_questions` بعدّاد تكرار — لتغذية قاعدة المعرفة من صفحة الاستهلاك.
 
 - توثيق OpenAPI تلقائي (Swagger) — إصدارات API (`/v1`).
 - WebSocket للوحة: تحديثات حية للنبضات والعدادات (Socket.IO namespaces لكل دور).

@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { db, id, json, now, withTransaction } from '@cbd/db';
 import { decodeEntities, fetchDirect, looksLikeHtml, sanitizeFeedUrl } from './crawl.js';
 import { BRIDE_DEFAULTS, normalizeArabic } from '@cbd/db/seed-kanz';
+import { WebhooksService } from './webhooks.service.js';
 
 export interface NormalizedProduct {
   externalId: string;
@@ -78,6 +79,8 @@ const HEADER_ALIASES: Record<string, string[]> = {
 @Injectable()
 export class CatalogService {
   private readonly logger = new Logger('Catalog');
+
+  constructor(private readonly webhooks: WebhooksService) {}
 
   // ─────────────────────────── الجلب ───────────────────────────
 
@@ -535,6 +538,16 @@ export class CatalogService {
         job.summary = summary;
         job.status = summary.ok ? 'done' : 'error';
         job.error = summary.error ?? '';
+        // Webhook صادر عند نجاح المزامنة (من مسار الـ job أو الرفع اليدوي)
+        if (summary.ok) {
+          void this.webhooks.enqueue('catalog.synced', clientId, {
+            products: summary.total,
+            inserted: summary.inserted,
+            updated: summary.updated,
+            itemsTotal: summary.itemsTotal,
+            tookMs: summary.durationMs,
+          });
+        }
       } catch (err) {
         job.status = 'error';
         job.error = (err as Error).message;
@@ -558,6 +571,16 @@ export class CatalogService {
     for (const r of rows) {
       const s = await this.syncClientCatalog(String(r.client_id));
       results.push({ clientId: String(r.client_id), ok: s.ok, error: s.error });
+      // Webhook صادر عند نجاح مزامنة الكتالوج (مراقبة من Sheets/CRM)
+      if (s.ok) {
+        void this.webhooks.enqueue('catalog.synced', String(r.client_id), {
+          products: s.total,
+          inserted: s.inserted,
+          updated: s.updated,
+          itemsTotal: s.itemsTotal,
+          tookMs: s.durationMs,
+        });
+      }
     }
     return results;
   }

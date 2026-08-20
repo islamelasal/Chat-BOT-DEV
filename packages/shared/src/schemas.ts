@@ -32,7 +32,12 @@ export const clientUpdateSchema = clientCreateSchema.partial().extend({
 export const orderTrackSchema = z.object({
   sessionToken: z.string().min(10),
   orderId: z.string().min(1).max(40),
-  email: z.string().email().optional().default(''),
+  // ملاحظة: default('') مع .email() خطأ شائع في Zod (يُطبَّق قبل التحقق) —
+  // نستخدم preprocess لتحويل السلسلة الفارغة إلى undefined قبل التحقق الاختياري
+  email: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.string().email('بريد غير صالح').max(120).optional()
+  ),
 });
 
 export const brandUpdateSchema = z.object({
@@ -69,7 +74,10 @@ export const themeUpdateSchema = z.object({
   handoffTitle: z.string().max(120).optional().default('محتاج مساعدة من فريقنا؟'),
   handoffWhatsapp: z.string().max(20).optional().default(''),
   handoffPhone: z.string().max(20).optional().default(''),
-  handoffEmail: z.string().email().optional().default(''),
+  handoffEmail: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.string().email('بريد غير صالح').max(120).optional()
+  ),
   bubbleIcon: z.enum(['chat', 'key', 'custom']).optional().default('chat'),
   bubbleIconUrl: z.string().max(2000).optional().default(''),
   cursorKey: z.boolean().optional().default(false),

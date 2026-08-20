@@ -8,6 +8,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { cache, db, id, json, now } from '@cbd/db';
+import { normalizeArabic } from '@cbd/db/seed-kanz';
 import type { Conversation, PageContext, ThemeConfig } from '@cbd/shared';
 import { config } from './config.js';
 import { signSession, verifySession } from './crypto.js';
@@ -55,6 +56,18 @@ const DEFAULT_THEME: ThemeConfig = {
   showBrand: true,
   logoUrl: null,
   poweredBy: true,
+  leadEnabled: true,
+  leadTitle: 'سيب بياناتك وهنتواصل معاك',
+  leadButton: '📋 سيب بياناتك',
+  leadAskPhone: true,
+  handoffEnabled: true,
+  handoffTitle: 'تواصل معانا',
+  handoffWhatsapp: '',
+  handoffPhone: '',
+  handoffEmail: '',
+  bubbleIcon: 'chat',
+  bubbleIconUrl: '',
+  cursorKey: false,
 };
 
 @Injectable()
@@ -209,6 +222,38 @@ export class WidgetService {
       page?.path ?? null, now()
     );
     return { id: leadId };
+  }
+
+  /**
+   * تسجيل سؤال لم يستطع البوت الإجابة عنه (استُخدم الرد الاحتياطي)
+   * upsert بتطبيع عربي (تشكيل/همزات/ألفويات) — حتى تتجمع التكرارات كسؤال واحد.
+   * معزول تماماً: أي خطأ هنا لا يمس مسار الودجت.
+   */
+  async recordUnanswered(clientId: string, botId: string, question: string): Promise<void> {
+    try {
+      const trimmed = question.trim().slice(0, 300);
+      if (trimmed.length < 2) return;
+      const normalized = normalizeArabic(trimmed).slice(0, 120);
+      if (normalized.length < 2) return;
+      const existing = await db.get(
+        'SELECT id, count FROM unanswered_questions WHERE client_id = ? AND bot_id = ? AND normalized_q = ?',
+        clientId, botId, normalized
+      ) as { id: string; count: number } | undefined;
+      if (existing) {
+        await db.run(
+          "UPDATE unanswered_questions SET count = count + 1, last_at = ?, question = ?, status = 'open' WHERE id = ?",
+          now(), trimmed, existing.id
+        );
+        return;
+      }
+      await db.run(
+        `INSERT INTO unanswered_questions (id, client_id, bot_id, question, normalized_q, count, status, first_at, last_at)
+         VALUES (?, ?, ?, ?, ?, 1, 'open', ?, ?)`,
+        id('unq'), clientId, botId, trimmed, normalized, now(), now()
+      );
+    } catch {
+      /* يجب ألا يعطل مسار الودجت أبداً */
+    }
   }
 
   async setFeedback(conversationId: string, messageId: string, feedback: 'up' | 'down'): Promise<boolean> {

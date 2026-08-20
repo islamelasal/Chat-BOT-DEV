@@ -2,20 +2,26 @@
 
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/client-api';
-import { Card, CardHeader, Stat, Table } from '@/components/ui';
+import { Badge, Button, Card, CardHeader, Stat, Table } from '@/components/ui';
 import { PageError, PageLoading } from '@/components/page-state';
 
 export default function UsagePage() {
   const [summary, setSummary] = useState<any>(null);
   const [series, setSeries] = useState<any[]>([]);
   const [recon, setRecon] = useState<any>(null);
+  const [unanswered, setUnanswered] = useState<any[]>([]);
+  const [unansweredFilter, setUnansweredFilter] = useState<'open' | 'resolved'>('open');
   const [error, setError] = useState('');
+
+  const loadUnanswered = (status: 'open' | 'resolved') =>
+    apiClient<any[]>(`/usage/unanswered?limit=50&status=${status}`).then(setUnanswered).catch(() => setUnanswered([]));
 
   useEffect(() => {
     Promise.all([
       apiClient<any>('/usage/summary?range=24h'),
       apiClient<any[]>('/usage/series?range=24h'),
       apiClient<any>('/usage/reconciliation'),
+      loadUnanswered('open'),
     ])
       .then(([s, se, r]) => {
         setSummary(s);
@@ -24,6 +30,11 @@ export default function UsagePage() {
       })
       .catch((e) => setError((e as Error).message));
   }, []);
+
+  const resolveQuestion = async (id: string, status: 'open' | 'resolved') => {
+    await apiClient(`/usage/unanswered/${id}/resolve`, { method: 'POST', json: { status } });
+    loadUnanswered(unansweredFilter);
+  };
 
   if (error) return <PageError msg={error} />;
   if (!summary || !recon) return <PageLoading />;
@@ -112,6 +123,58 @@ export default function UsagePage() {
             </div>
           </div>
         </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="الأسئلة غير المجابة"
+          subtitle="أسئلة الزوار اللي البوت مضطر يستخدم فيها الرد الاحتياطي (النموذج فشل أو انقطع) — غطّها في قاعدة المعرفة وحسّن تجربة العملاء"
+          action={
+            <div className="flex gap-1">
+              <button
+                onClick={() => {
+                  setUnansweredFilter('open');
+                  loadUnanswered('open');
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${unansweredFilter === 'open' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500'}`}
+              >
+                مفتوحة
+              </button>
+              <button
+                onClick={() => {
+                  setUnansweredFilter('resolved');
+                  loadUnanswered('resolved');
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${unansweredFilter === 'resolved' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500'}`}
+              >
+                محلولة
+              </button>
+            </div>
+          }
+        />
+        {unanswered.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-400">
+            {unansweredFilter === 'open' ? 'مفيش أسئلة غير مجابة — البوت شغال تمام 👌' : 'مفيش أسئلة محلولة لسه'}
+          </div>
+        ) : (
+          <Table head={['السؤال', 'البوت', 'التكرار', 'آخر ظهور', '']}>
+            {unanswered.map((q) => (
+              <tr key={q.id} className="border-b border-slate-100">
+                <td className="max-w-[300px] px-4 py-2.5 text-xs font-bold text-slate-700">{q.question}</td>
+                <td className="px-4 py-2.5 text-xs text-slate-500">{q.botName}</td>
+                <td className="px-4 py-2.5">
+                  <Badge tone={q.count >= 5 ? 'red' : q.count >= 2 ? 'amber' : 'slate'}>{q.count} مرة</Badge>
+                </td>
+                <td className="px-4 py-2.5 text-xs text-slate-500">{new Date(q.lastAt).toLocaleString('ar-EG')}</td>
+                <td className="px-4 py-2.5">
+                  <Button variant={unansweredFilter === 'open' ? 'outline' : 'ghost'} onClick={() => resolveQuestion(q.id, unansweredFilter === 'open' ? 'resolved' : 'open')}>
+                    {unansweredFilter === 'open' ? '✓ تمت تغطيته' : '↩ إعادة فتح'}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
       </Card>
     </div>
   );

@@ -26,6 +26,7 @@ import { Public } from '../auth.js';
 import { GatewayService } from '../gateway.service.js';
 import { OrderTrackingService } from '../order-tracking.service.js';
 import { WidgetService } from '../widget.service.js';
+import { WebhooksService } from '../webhooks.service.js';
 import { audit } from '../audit.js';
 
 @Public()
@@ -34,7 +35,8 @@ export class WidgetController {
   constructor(
     private readonly gateway: GatewayService,
     private readonly widgets: WidgetService,
-    private readonly orders: OrderTrackingService
+    private readonly orders: OrderTrackingService,
+    private readonly webhooks: WebhooksService
   ) {}
 
   @Get('healthz')
@@ -185,6 +187,7 @@ export class WidgetController {
     let errored = false;
     let assistantMsgId: string | null = null;
     let products: any[] = [];
+    let usedFallback = false;
     try {
       for await (const chunk of result.stream) {
         if (res.writableEnded || res.destroyed) break;
@@ -199,6 +202,7 @@ export class WidgetController {
       // الرد الاحتياطي للشخصية (مواصفة كنز الشوا) عند انقطاع النموذج
       if (!assistantText && errored && botFallback) {
         assistantText = botFallback;
+        usedFallback = true;
         for (const word of botFallback.split(/(\s+)/)) {
           if (res.writableEnded || res.destroyed) break;
           res.write(`data: ${JSON.stringify({ type: 'delta', text: word })}\n\n`);
@@ -221,6 +225,21 @@ export class WidgetController {
         }
       } catch {
         /* الكتالوج اختياري */
+      }
+
+      // Webhook صادر لرسالة مكتملة + تسجيل الأسئلة غير المجابة — fire-and-forget لا يمس زمن الرد
+      if (assistantText) {
+        void this.webhooks.enqueue('conversation.message', sess.cid, {
+          botName: bot.name,
+          question: message.slice(0, 4000),
+          answer: assistantText.slice(0, 4000),
+          conversationId: conv.id,
+          page: page?.path ?? null,
+          usedFallback,
+        });
+      }
+      if (usedFallback && assistantText) {
+        void this.widgets.recordUnanswered(sess.cid, sess.bid, message);
       }
 
       res.write(
@@ -270,6 +289,12 @@ export class WidgetController {
     const page = req.body?.page ?? undefined;
     const result = await this.widgets.saveLead(sess, { name, email, phone, message }, page);
     audit({ action: 'widget.lead_captured', entity: 'widget', entityId: sess.cid, meta: { email } });
+    // Webhook صادر — Lead جديد (Zapier/Sheets/CRM) بدون أي تأثير على زمن رد الزائر
+    void this.webhooks.enqueue('lead.created', sess.cid, {
+      lead: { id: result.id, name, email, phone, message },
+      botId: sess.bid,
+      page: page?.path ?? null,
+    });
     return { ok: true, id: result.id };
   }
 
@@ -305,6 +330,10 @@ export class WidgetController {
       createdAt: now(),
     });
     audit({ action: 'widget.handoff', entity: 'widget', entityId: sess.cid, meta: { method: parsed.data.method } });
+    void this.webhooks.enqueue('handoff.requested', sess.cid, {
+      method: parsed.data.method,
+      botId: sess.bid,
+    });
     return { ok: true };
   }
 
@@ -328,7 +357,14 @@ export class WidgetController {
     }
     const result = await this.orders.track(sess.cid, parsed.data.orderId, parsed.data.email || undefined);
     audit({ action: 'widget.order_track', entity: 'widget', entityId: sess.cid, meta: { orderId: parsed.data.orderId, ok: result.ok } });
-    return { ok: result.ok, reply: this.orders.kanzReply(result) };
+    const reply = this.orders.kanzReply(result);
+    void this.webhooks.enqueue('order.tracked', sess.cid, {
+      orderId: parsed.data.orderId,
+      ok: result.ok,
+      reply: reply.slice(0, 500),
+      botId: sess.bid,
+    });
+    return { ok: result.ok, reply };
   }
 
   @Post('feedback')

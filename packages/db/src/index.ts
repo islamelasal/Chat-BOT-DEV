@@ -105,7 +105,7 @@ export const db: Db = (() => {
 
 export async function migrate(): Promise<void> {
   const schema = readFileSync(schemaPath(), 'utf8');
-  const version = 6;
+  const version = 7;
   let applied: Row | undefined;
   try {
     applied = await db.get('SELECT version FROM _migrations ORDER BY version DESC LIMIT 1');

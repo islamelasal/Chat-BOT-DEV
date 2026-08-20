@@ -17,6 +17,8 @@ import { LeadsController } from './controllers/leads.controller.js';
 import { CatalogController } from './controllers/catalog.controller.js';
 import { CatalogService } from './catalog.service.js';
 import { OrderTrackingService } from './order-tracking.service.js';
+import { WebhooksService } from './webhooks.service.js';
+import { WebhooksController } from './controllers/webhooks.controller.js';
 
 @Module({
   providers: [
@@ -24,6 +26,7 @@ import { OrderTrackingService } from './order-tracking.service.js';
     WidgetService,
     CatalogService,
     OrderTrackingService,
+    WebhooksService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
@@ -40,6 +43,7 @@ import { OrderTrackingService } from './order-tracking.service.js';
     ConversationsController,
     LeadsController,
     CatalogController,
+    WebhooksController,
   ],
 })
 export class AppModule {}

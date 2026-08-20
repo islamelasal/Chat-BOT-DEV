@@ -1,8 +1,12 @@
 /**
  * العدادات والاستهلاك — ملخصات، سلاسل زمنية، مصالحات
+ * + الأسئلة غير المجابة (لتغذية قاعدة المعرفة)
  */
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { db } from '@cbd/db';
+import { CurrentUser, Roles } from '../auth.js';
+import type { AuthUser } from '../auth.js';
+import { audit } from '../audit.js';
 
 @Controller('usage')
 export class UsageController {
@@ -90,6 +94,55 @@ export class UsageController {
       buckets.set(bucket, b);
     }
     return [...buckets.values()].sort((a, b) => a.t - b.t);
+  }
+
+  /** الأسئلة غير المجابة — الأكثر تكراراً لكل عميل/بوت (مرتبة تنازلياً بالعدّاد) */
+  @Get('unanswered')
+  async unanswered(
+    @Query('clientId') clientId?: string,
+    @Query('botId') botId?: string,
+    @Query('status') status?: string,
+    @Query('limit') limit?: string
+  ) {
+    const lim = Math.min(Number(limit ?? 50), 200);
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (clientId) { conds.push('client_id = ?'); params.push(clientId); }
+    if (botId) { conds.push('bot_id = ?'); params.push(botId); }
+    if (status === 'open' || status === 'resolved') { conds.push('status = ?'); params.push(status); }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+    const rows = await db.all(
+      `SELECT * FROM unanswered_questions ${where} ORDER BY count DESC, last_at DESC LIMIT ?`,
+      ...params, lim
+    ) as any[];
+    const bots = await db.all('SELECT id, name FROM bots') as any[];
+    return rows.map((r) => ({
+      id: String(r.id),
+      clientId: String(r.client_id),
+      botId: String(r.bot_id),
+      botName: bots.find((b) => String(b.id) === String(r.bot_id))?.name ?? String(r.bot_id),
+      question: String(r.question),
+      count: Number(r.count),
+      status: String(r.status),
+      firstAt: Number(r.first_at),
+      lastAt: Number(r.last_at),
+    }));
+  }
+
+  /** حلّ/تجاهل سؤال غير مجاب (بعد إضافة محتواه لقاعدة المعرفة مثلاً) */
+  @Roles('super_admin', 'operator')
+  @Post('unanswered/:id/resolve')
+  async resolveUnanswered(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthUser
+  ) {
+    const row = await db.get('SELECT id FROM unanswered_questions WHERE id = ?', id);
+    if (!row) throw new NotFoundException('السؤال غير موجود');
+    const status = (body as { status?: string })?.status === 'open' ? 'open' : 'resolved';
+    await db.run('UPDATE unanswered_questions SET status = ? WHERE id = ?', status, id);
+    audit({ userId: user.id, action: 'unanswered.resolve', entity: 'unanswered', entityId: id, meta: { status } });
+    return { ok: true, status };
   }
 
   @Get('reconciliation')

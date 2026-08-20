@@ -9,8 +9,12 @@ import { CircuitBreaker, HealthRegistry } from '@cbd/gateway';
 import { startWorkerAll } from '@cbd/worker-core';
 import { decryptSecret } from './crypto.js';
 import { config } from './config.js';
+import { WebhooksService } from './webhooks.service.js';
 
 migrate();
+
+// معالج Webhooks الصادرة — يعمل هنا أيضاً في الوضع المستقل (ادّعاء متفائل يمنع التكرار)
+new WebhooksService().startPolling();
 
 const breakers = new CircuitBreaker({
   baseCooldownMs: 15_000,
