@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS clients (
   status TEXT NOT NULL DEFAULT 'active',
   brand_json TEXT NOT NULL DEFAULT '{}',
   theme_json TEXT NOT NULL DEFAULT '{}',
+  cs_cart_json TEXT NOT NULL DEFAULT '',   -- إعداد تكامل CS-Cart (storeUrl/apiEmail/apiKey مشفر)
   monthly_limit INTEGER NOT NULL DEFAULT 5000,
   daily_limit INTEGER NOT NULL DEFAULT 300,
   created_at INTEGER NOT NULL

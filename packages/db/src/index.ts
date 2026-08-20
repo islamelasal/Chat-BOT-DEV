@@ -105,7 +105,7 @@ export const db: Db = (() => {
 
 export async function migrate(): Promise<void> {
   const schema = readFileSync(schemaPath(), 'utf8');
-  const version = 5;
+  const version = 6;
   let applied: Row | undefined;
   try {
     applied = await db.get('SELECT version FROM _migrations ORDER BY version DESC LIMIT 1');
@@ -128,6 +128,7 @@ export async function migrate(): Promise<void> {
       "ALTER TABLE catalog_products ADD COLUMN IF NOT EXISTS is_deal INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE catalog_products ADD COLUMN IF NOT EXISTS is_bride_essential INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE catalog_products ADD COLUMN IF NOT EXISTS attrs_json TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE clients ADD COLUMN IF NOT EXISTS cs_cart_json TEXT NOT NULL DEFAULT ''",
     ];
     for (const stmt of pgCols) await db.exec(stmt);
   } else {
@@ -140,6 +141,7 @@ export async function migrate(): Promise<void> {
     await ensureColumn('catalog_products', 'is_deal', "INTEGER NOT NULL DEFAULT 0");
     await ensureColumn('catalog_products', 'is_bride_essential', "INTEGER NOT NULL DEFAULT 0");
     await ensureColumn('catalog_products', 'attrs_json', "TEXT NOT NULL DEFAULT ''");
+    await ensureColumn('clients', 'cs_cart_json', "TEXT NOT NULL DEFAULT ''");
   }
   await db.run('INSERT INTO _migrations (version, applied_at) VALUES (?, ?)', version, Date.now());
 }

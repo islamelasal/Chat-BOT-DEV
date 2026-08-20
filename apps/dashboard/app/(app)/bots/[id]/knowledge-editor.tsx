@@ -13,6 +13,10 @@ export default function KnowledgeEditor({ bot }: { bot: any }) {
   const [urls, setUrls] = useState('');
   const [crawlBusy, setCrawlBusy] = useState(false);
   const [crawlResult, setCrawlResult] = useState('');
+  // استيراد llms.txt
+  const [llmsUrl, setLlmsUrl] = useState('');
+  const [llmsBusy, setLlmsBusy] = useState(false);
+  const [llmsMsg, setLlmsMsg] = useState('');
 
   const add = async () => {
     if (!title.trim() || !content.trim()) return;
@@ -39,6 +43,35 @@ export default function KnowledgeEditor({ bot }: { bot: any }) {
   const remove = async (chunkId: string) => {
     await fetch(`/backend/bots/${bot.id}/knowledge/${chunkId}`, { method: 'DELETE', credentials: 'include' });
     setChunks((c: any[]) => c.filter((k) => k.id !== chunkId));
+  };
+
+  /** استيراد llms.txt (ميزة CS-Cart 4.20.1 — Website → SEO → llms.txt) */
+  const importLlms = async () => {
+    const url = llmsUrl.trim();
+    if (!url) return;
+    setLlmsBusy(true);
+    setLlmsMsg('');
+    try {
+      const res = await fetch(`/backend/bots/${bot.id}/llms`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const j = await res.json();
+      if (res.ok) {
+        setLlmsMsg(`✅ استوردنا ${j.added} قسم معرفة من llms.txt (${j.sections} قسم في الملف)`);
+        setLlmsUrl('');
+        const fresh = await fetch(`/backend/bots/${bot.id}`, { credentials: 'include' }).then((r) => r.json());
+        setChunks(fresh.knowledgeChunks ?? []);
+      } else {
+        setLlmsMsg(`⚠️ ${j?.message ?? 'فشل الاستيراد'}`);
+      }
+    } catch (err) {
+      setLlmsMsg(`⚠️ ${(err as Error).message}`);
+    } finally {
+      setLlmsBusy(false);
+    }
   };
 
   /** زحف روابط الموقع وتحويلها تلقائياً لشظايا معرفة (مثل SiteGPT) */
@@ -75,6 +108,19 @@ export default function KnowledgeEditor({ bot }: { bot: any }) {
     <Card>
       <CardHeader title="قاعدة المعرفة (RAG)" subtitle="يسترجع البوت الأجزاء الأكثر صلة بكل سؤال — أضف السياسات والمنتجات والأسئلة الشائعة" />
       <div className="space-y-4 p-5">
+        {/* استيراد llms.txt — ميزة CS-Cart 4.20.1 */}
+        <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-3">
+          <div className="text-xs font-extrabold text-sky-800">📄 استيراد llms.txt (خاصة بـ CS-Cart 4.20.1)</div>
+          <div className="text-[10px] text-sky-600">من إعدادات متجرك: Website → SEO → llms.txt — كل قسم يصبح عنصر معرفة</div>
+          <div className="mt-2 flex items-center gap-2">
+            <Input dir="ltr" value={llmsUrl} onChange={(e) => setLlmsUrl(e.target.value)} placeholder="https://yourdomain.com/llms.txt" />
+            <Button variant="outline" onClick={importLlms} disabled={llmsBusy || !llmsUrl.trim()}>
+              {llmsBusy ? 'جارٍ الاستيراد...' : '📄 استيراد'}
+            </Button>
+          </div>
+          {llmsMsg && <div className="mt-2 text-[11px] font-bold text-sky-700">{llmsMsg}</div>}
+        </div>
+
         {/* زحف روابط الموقع */}
         <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
           <div className="flex items-center justify-between">

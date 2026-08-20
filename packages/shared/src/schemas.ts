@@ -7,6 +7,12 @@ export const loginSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+export const csCartSchema = z.object({
+  storeUrl: z.string().url(),
+  apiEmail: z.string().email(),
+  apiKey: z.string().min(5).max(500),
+});
+
 export const clientCreateSchema = z.object({
   name: z.string().min(2).max(120),
   siteUrl: z.string().url(),
@@ -16,10 +22,17 @@ export const clientCreateSchema = z.object({
   domains: z.array(z.string().min(4)).default([]),
   monthlyMsgLimit: z.number().int().min(100).default(5000),
   dailyMsgLimit: z.number().int().min(10).default(300),
+  csCart: csCartSchema.optional(),
 });
 
 export const clientUpdateSchema = clientCreateSchema.partial().extend({
   status: z.enum(['active', 'suspended', 'trial']).optional(),
+});
+
+export const orderTrackSchema = z.object({
+  sessionToken: z.string().min(10),
+  orderId: z.string().min(1).max(40),
+  email: z.string().email().optional().default(''),
 });
 
 export const brandUpdateSchema = z.object({

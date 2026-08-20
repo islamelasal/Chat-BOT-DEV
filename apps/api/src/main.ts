@@ -1,3 +1,4 @@
+import 'dotenv/config'; // تحميل .env من apps/api (مفاتيح المزودين وغيرها)
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';

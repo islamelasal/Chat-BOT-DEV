@@ -16,12 +16,14 @@ import { ConversationsController } from './controllers/conversations.controller.
 import { LeadsController } from './controllers/leads.controller.js';
 import { CatalogController } from './controllers/catalog.controller.js';
 import { CatalogService } from './catalog.service.js';
+import { OrderTrackingService } from './order-tracking.service.js';
 
 @Module({
   providers: [
     GatewayService,
     WidgetService,
     CatalogService,
+    OrderTrackingService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

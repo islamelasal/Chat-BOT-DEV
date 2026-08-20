@@ -16,7 +16,7 @@ import { botCreateSchema, knowledgeChunkSchema, routingPolicySchema } from '@cbd
 import { CurrentUser, Roles } from '../auth.js';
 import type { AuthUser } from '../auth.js';
 import { audit } from '../audit.js';
-import { crawlUrl, isPrivateUrl } from '../crawl.js';
+import { crawlUrl, fetchLlmFile, isPrivateUrl } from '../crawl.js';
 import { config } from '../config.js';
 
 async function botRowToBot(r: any) {
@@ -192,6 +192,35 @@ export class BotsController {
       titles: titles.slice(0, 5),
       total: (await db.get('SELECT COUNT(*) AS c FROM knowledge_chunks WHERE bot_id = ?', id) as any)?.c,
     };
+  }
+
+  /** استيراد llms.txt (ميزة CS-Cart 4.20.1) — كل قسم Markdown يصبح شظية معرفة */
+  @Roles('super_admin', 'operator')
+  @Post(':id/llms')
+  async importLlms(@Param('id') id: string, @Body() body: { url?: string }, @CurrentUser() user: AuthUser) {
+    const r = await db.get('SELECT id FROM bots WHERE id = ?', id) as any;
+    if (!r) throw new NotFoundException('بوت غير موجود');
+    const url = String(body?.url ?? '').trim();
+    if (!/^https?:\/\/[^\s]+$/.test(url)) throw new BadRequestException('رابط llms.txt صحيح مطلوب');
+    if (!config.CRAWL_ALLOW_PRIVATE && (await isPrivateUrl(url))) {
+      throw new BadRequestException('ممنوع استيراد العناوين الداخلية');
+    }
+    const result = await fetchLlmFile(url);
+    let added = 0;
+    for (const chunk of result.chunks) {
+      const exists = await db.get(
+        'SELECT id FROM knowledge_chunks WHERE bot_id = ? AND source = ? AND title = ?',
+        id, url, chunk.title
+      );
+      if (exists) continue;
+      await db.run(
+        `INSERT INTO knowledge_chunks (id, bot_id, title, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+        uid('kn'), id, chunk.title, chunk.content, url, now()
+      );
+      added++;
+    }
+    audit({ userId: user.id, action: 'bot.llms_import', entity: 'bot', entityId: id, meta: { url, added, sections: result.chunks.length } });
+    return { added, sections: result.chunks.length, title: result.title };
   }
 
   @Roles('super_admin', 'operator')

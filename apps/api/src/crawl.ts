@@ -273,6 +273,79 @@ export async function crawlUrl(url: string, timeoutMs = 30000): Promise<CrawlRes
   };
 }
 
+// ─────────────────────────── llms.txt (معيار LLMs للويب) ───────────────────────────
+
+export interface LlmResult {
+  title: string;
+  chunks: Array<{ title: string; content: string; source: string }>;
+}
+
+/**
+ * استيراد llms.txt (ميزة CS-Cart 4.20.1 — Website → SEO → llms.txt)
+ * يُقسم الملف حسب عناوين Markdown (# / ##) — كل قسم يصبح شظية معرفة مستقلة.
+ */
+export async function fetchLlmFile(url: string, timeoutMs = 30000): Promise<LlmResult> {
+  const scraplingUrl = process.env.SCRAPLING_URL ?? '';
+  let text = '';
+
+  // سلسلة الجلب: مباشر محسّن → Scrapling
+  const direct = await fetchDirect(url, { timeoutMs: 15_000, attempts: 2, tryVariants: true });
+  if (direct.ok && direct.text.length > 40) {
+    text = direct.text;
+  } else if (scraplingUrl) {
+    try {
+      const sres = await fetch(`${scraplingUrl.replace(/\/+$/, '')}/crawl`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url, strategy: 'auto', timeout_ms: timeoutMs }),
+        signal: AbortSignal.timeout(timeoutMs + 20_000),
+      });
+      if (sres.ok) {
+        const j = (await sres.json()) as { ok?: boolean; html?: string };
+        if (j.ok && j.html) text = j.html;
+      }
+    } catch {
+      /* استمر */
+    }
+  }
+  if (!text || text.length < 40) throw new Error('تعذر جلب llms.txt — تأكد من الرابط');
+
+  const titleMatch = text.match(/^#\s+(.+)$/m);
+  const title = titleMatch?.[1]?.trim() || url.replace(/^https?:\/\//, '').split('/')[0] || 'llms.txt';
+
+  // تقسيم حسب عناوين Markdown
+  const sections: Array<{ title: string; content: string }> = [];
+  const lines = text.split(/\r?\n/);
+  let currentTitle = title;
+  let current: string[] = [];
+  const flush = () => {
+    const content = current.map((l) => l.trim()).filter(Boolean).join('\n').trim();
+    if (content.length >= 30) sections.push({ title: currentTitle.slice(0, 120), content: content.slice(0, 3000) });
+    current = [];
+  };
+  for (const line of lines) {
+    const h = line.match(/^#{1,3}\s+(.+)$/);
+    if (h) {
+      flush();
+      currentTitle = h[1]!.trim();
+    } else {
+      current.push(line);
+    }
+  }
+  flush();
+
+  if (!sections.length) {
+    // ملف نصي بلا عناوين — قسم واحد
+    const content = text.trim();
+    sections.push({ title, content: content.slice(0, 5000) });
+  }
+
+  return {
+    title,
+    chunks: sections.map((sec) => ({ title: sec.title, content: sec.content, source: url })),
+  };
+}
+
 // ─────────────────────────── حارس SSRF ───────────────────────────
 
 function isPrivateIp(ip: string): boolean {

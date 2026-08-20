@@ -137,6 +137,10 @@ function App() {
   const [leadBusy, setLeadBusy] = useState(false);
   const [leadError, setLeadError] = useState('');
   const [handoffOpen, setHandoffOpen] = useState(false);
+  const [trackOpen, setTrackOpen] = useState(false);
+  const [trackForm, setTrackForm] = useState({ orderId: '', email: '' });
+  const [trackBusy, setTrackBusy] = useState(false);
+  const [trackError, setTrackError] = useState('');
   const [bride, setBride] = useState<BrideData | null>(null);
   const [brideOpen, setBrideOpen] = useState(false);
   const [brideSelected, setBrideSelected] = useState<Set<string>>(new Set());
@@ -296,6 +300,42 @@ function App() {
       synth.speak(u);
     } catch {
       /* المتصفح لا يدعم القراءة */
+    }
+  }
+
+  /** تتبع الطلبات عبر CS-Cart API — يرد بنبرة كنز الشوا */
+  async function trackOrder() {
+    if (!cfg || trackBusy) return;
+    if (!trackForm.orderId.trim()) {
+      setTrackError('اكتب رقم الطلب');
+      return;
+    }
+    setTrackBusy(true);
+    setTrackError('');
+    try {
+      const token = sessionToken ?? (await ensureSession(cfg.botId));
+      if (!token) throw new Error('تعذر إنشاء جلسة');
+      const res = await fetch(API + '/w/order', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sessionToken: token,
+          orderId: trackForm.orderId.trim(),
+          email: trackForm.email.trim(),
+        }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.message ?? 'تعذر تتبع الطلب');
+      setMessages((m) => [
+        ...m,
+        { id: 'track_' + Date.now(), role: 'assistant', content: j?.reply ?? 'تعذر تتبع الطلب', feedback: null },
+      ]);
+      setTrackOpen(false);
+      setTrackForm({ orderId: '', email: '' });
+    } catch (err) {
+      setTrackError((err as Error).message);
+    } finally {
+      setTrackBusy(false);
     }
   }
 
@@ -541,6 +581,44 @@ function App() {
                   </>
                 );
               })()}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* تتبع الطلبات (CS-Cart API) */}
+      {theme.handoffEnabled && (
+        <div className="cbd-lead">
+          {!trackOpen ? (
+            <button className="cbd-lead-btn" onClick={() => setTrackOpen(true)}>
+              📦 تتبع طلبك لحظياً
+            </button>
+          ) : (
+            <div className="cbd-lead-form">
+              <div className="cbd-lead-title">📦 تتبع الطلب — اكتب رقم الطلب</div>
+              <input
+                className="cbd-input"
+                dir="ltr"
+                inputMode="numeric"
+                placeholder="رقم الطلب"
+                value={trackForm.orderId}
+                onInput={(e) => setTrackForm({ ...trackForm, orderId: (e.target as HTMLInputElement).value })}
+              />
+              <input
+                className="cbd-input"
+                type="email"
+                dir="ltr"
+                placeholder="البريد الإلكتروني (اختياري للتحقق)"
+                value={trackForm.email}
+                onInput={(e) => setTrackForm({ ...trackForm, email: (e.target as HTMLInputElement).value })}
+              />
+              {trackError && <div className="cbd-error">{trackError}</div>}
+              <div className="cbd-lead-actions">
+                <button className="cbd-send" style={{ width: '100%' }} onClick={() => void trackOrder()} disabled={trackBusy}>
+                  {trackBusy ? 'جارٍ التتبع...' : 'تتبع ✓'}
+                </button>
+                <button className="cbd-lead-cancel" onClick={() => setTrackOpen(false)}>إلغاء</button>
+              </div>
             </div>
           )}
         </div>

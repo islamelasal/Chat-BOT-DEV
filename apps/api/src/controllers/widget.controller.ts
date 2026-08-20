@@ -21,9 +21,10 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { db, id as uid, json, now, recordUsage } from '@cbd/db';
-import { chatRequestSchema, feedbackSchema, handoffSchema, leadSchema } from '@cbd/shared';
+import { chatRequestSchema, feedbackSchema, handoffSchema, leadSchema, orderTrackSchema } from '@cbd/shared';
 import { Public } from '../auth.js';
 import { GatewayService } from '../gateway.service.js';
+import { OrderTrackingService } from '../order-tracking.service.js';
 import { WidgetService } from '../widget.service.js';
 import { audit } from '../audit.js';
 
@@ -32,7 +33,8 @@ import { audit } from '../audit.js';
 export class WidgetController {
   constructor(
     private readonly gateway: GatewayService,
-    private readonly widgets: WidgetService
+    private readonly widgets: WidgetService,
+    private readonly orders: OrderTrackingService
   ) {}
 
   @Get('healthz')
@@ -304,6 +306,29 @@ export class WidgetController {
     });
     audit({ action: 'widget.handoff', entity: 'widget', entityId: sess.cid, meta: { method: parsed.data.method } });
     return { ok: true };
+  }
+
+  /** تتبع الطلبات عبر CS-Cart REST API — يرد بنبرة كنز الشوا */
+  @Post('order')
+  async trackOrder(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Headers('origin') origin: string | undefined
+  ) {
+    const parsed = orderTrackSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('رقم الطلب مطلوب');
+    const sess = this.widgets.verify(parsed.data.sessionToken);
+    if (!sess) throw new ForbiddenException('الجلسة منتهية — أعد تحميل البوت');
+    if (!(await this.widgets.isOriginAllowed(sess.cid, origin))) {
+      throw new ForbiddenException('هذا النطاق غير مسموح له باستخدام البوت');
+    }
+    const ip = (req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip ?? 'unknown').trim();
+    if (!(await this.widgets.rateLimit(ip, sess.cid, sess.vid))) {
+      throw new HttpException('طلبات كثيرة جداً — حاول بعد قليل', 429);
+    }
+    const result = await this.orders.track(sess.cid, parsed.data.orderId, parsed.data.email || undefined);
+    audit({ action: 'widget.order_track', entity: 'widget', entityId: sess.cid, meta: { orderId: parsed.data.orderId, ok: result.ok } });
+    return { ok: result.ok, reply: this.orders.kanzReply(result) };
   }
 
   @Post('feedback')

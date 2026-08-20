@@ -15,6 +15,7 @@ import { brandUpdateSchema, clientCreateSchema, clientUpdateSchema, themeUpdateS
 import { CurrentUser, Roles } from '../auth.js';
 import type { AuthUser } from '../auth.js';
 import { audit } from '../audit.js';
+import { encryptSecret } from '../crypto.js';
 
 async function clientRowToClient(r: any) {
   return {
@@ -28,6 +29,10 @@ async function clientRowToClient(r: any) {
     brand: json<any>(r.brand_json, {}),
     theme: json<any>(r.theme_json, {}),
     domains: (await db.all('SELECT domain FROM domains WHERE client_id = ?', r.id) as any[]).map((d) => String(d.domain)),
+    csCart: (() => {
+      const c = json<any>(r.cs_cart_json ?? null, null);
+      return c ? { storeUrl: c.storeUrl ?? '', apiEmail: c.apiEmail ?? '', configured: Boolean(c.apiKeyEnc) } : null;
+    })(),
     monthlyLimit: Number(r.monthly_limit),
     dailyLimit: Number(r.daily_limit),
     createdAt: Number(r.created_at),
@@ -76,6 +81,19 @@ export class ClientsController {
     const r = await db.get('SELECT * FROM clients WHERE id = ?', id) as any;
     if (!r) throw new NotFoundException('عميل غير موجود');
     const d = parsed.data;
+    // حفظ تكامل CS-Cart (المفتاح يُشفر ولا يُعاد عرضه أبداً)
+    if ((d as any)?.csCart?.apiKey) {
+      const existingCs = json<any>(r.cs_cart_json ?? null, {});
+      await db.run(
+        'UPDATE clients SET cs_cart_json = ? WHERE id = ?',
+        JSON.stringify({
+          storeUrl: (d as any).csCart.storeUrl ?? existingCs.storeUrl ?? '',
+          apiEmail: (d as any).csCart.apiEmail ?? existingCs.apiEmail ?? '',
+          apiKeyEnc: encryptSecret((d as any).csCart.apiKey),
+        }),
+        id
+      );
+    }
     await db.run(
       `UPDATE clients SET name = ?, site_url = ?, email = ?, phone = ?, plan = ?, status = ?, monthly_limit = ?, daily_limit = ? WHERE id = ?`,
       d.name ?? r.name, d.siteUrl ?? r.site_url, d.email ?? r.email,

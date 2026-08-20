@@ -1,0 +1,74 @@
+# Render Blueprint — 3 خدمات (API + Worker + لوحة) + PostgreSQL + Redis
+# الاستخدام: render.com → New → Blueprint → ربط هذا المستودع
+services:
+  - type: web
+    name: chatbotdev-api
+    runtime: docker
+    dockerfilePath: ./infra/Dockerfile.api
+    plan: standard
+    healthCheckPath: /w/healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: chatbotdev-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: chatbotdev-redis
+          type: redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: DEMO_MODE
+        value: "false"
+      - key: WORKER_IN_PROCESS
+        value: "false"
+      - key: CRAWL_ALLOW_PRIVATE
+        value: "false"
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: SCRAPLING_URL
+        value: ""
+
+  - type: worker
+    name: chatbotdev-worker
+    runtime: docker
+    dockerfilePath: ./infra/Dockerfile.api
+    dockerCommand: node dist/worker-main.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: chatbotdev-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: chatbotdev-redis
+          type: redis
+          property: connectionString
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+
+  - type: web
+    name: chatbotdev-dashboard
+    runtime: docker
+    dockerfilePath: ./infra/Dockerfile.dashboard
+    plan: starter
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_INTERNAL_URL
+        value: "http://chatbotdev-api:4000"
+
+databases:
+  - name: chatbotdev-db
+    plan: starter
