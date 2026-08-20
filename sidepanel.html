@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Project Agent</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span>✦</span></div>
+          <div>
+            <h1>Project Agent</h1>
+            <p>وكيل حديث · يفهم السياق ويكمل مشروعك</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span class="connection-status" id="connection-status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="connection-label">جاهز</span>
+          </span>
+          <button class="icon-button" type="button" data-action="settings-open" aria-label="فتح الإعدادات" title="الإعدادات">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="m19.4 15 .1.1a1.8 1.8 0 0 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3.1 1.3v.2a1.8 1.8 0 0 1-3.6 0v-.2a1.8 1.8 0 0 0-3.1-1.3l-.1.1a1.8 1.8 0 1 1-2.5-2.5l.1-.1A1.8 1.8 0 0 0 4.3 12a1.8 1.8 0 0 0-1.3-3.1h-.2a1.8 1.8 0 0 1 0-3.6H3A1.8 1.8 0 0 0 4.3 2.2l-.1-.1a1.8 1.8 0 1 1 2.5-2.5l.1.1A1.8 1.8 0 0 0 9.9 0V-.2a1.8 1.8 0 0 1 3.6 0V0a1.8 1.8 0 0 0 3.1 1.3l.1-.1a1.8 1.8 0 0 1 2.5 2.5l-.1.1A1.8 1.8 0 0 0 20.4 7h.2a1.8 1.8 0 0 1 0 3.6h-.2a1.8 1.8 0 0 0-1 4.4Z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <div class="setup-notice" id="setup-notice" hidden>
+          <div class="notice-icon" aria-hidden="true">◎</div>
+          <div class="notice-copy">
+            <strong>خطوة واحدة للبدء</strong>
+            <span>أضف مفتاح Gemini لتفعيل البحث الحديث والردود الاحترافية.</span>
+          </div>
+          <button class="text-button" type="button" data-action="settings-open">الإعدادات</button>
+        </div>
+
+        <section class="workspace-bar" aria-label="إدارة المشروع">
+          <div class="section-eyebrow"><span class="eyebrow-dot"></span> مساحة العمل</div>
+          <div class="project-controls">
+            <div class="select-wrap">
+              <select id="project-select" aria-label="اختر المشروع"></select>
+              <span class="select-chevron" aria-hidden="true">⌄</span>
+            </div>
+            <button class="small-icon-button" type="button" data-action="project-new" aria-label="إنشاء مشروع جديد" title="مشروع جديد">＋</button>
+            <button class="small-icon-button muted-button" id="project-delete" type="button" data-action="project-delete" aria-label="حذف المشروع الحالي" title="حذف المشروع">⌫</button>
+          </div>
+        </section>
+
+        <section class="page-context-card" id="page-context-card" aria-label="سياق الصفحة">
+          <div class="context-leading-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v9a2.5 2.5 0 0 1-2.5 2.5H13l-3.7 3.1a.8.8 0 0 1-1.3-.6V17H6.5A2.5 2.5 0 0 1 4 14.5v-9Z"/><path d="M8 7.5h8M8 11h5"/></svg>
+          </div>
+          <div class="context-details">
+            <div class="context-label-row">
+              <span>السياق الحالي</span>
+              <span class="context-state" id="context-state">جارٍ القراءة…</span>
+            </div>
+            <strong id="context-title">نحضر الصفحة الحالية</strong>
+            <span class="context-url" id="context-url">سيستخدم الوكيل هذا السياق عندما ترسل رسالة.</span>
+            <span class="selection-badge" id="selection-badge" hidden>نص محدد جاهز</span>
+          </div>
+          <button class="context-refresh" type="button" data-action="refresh-context" aria-label="تحديث سياق الصفحة" title="تحديث السياق">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-14.7-3L4 10"/><path d="M4 5v5h5M4 13a8.1 8.1 0 0 0 14.7 3L20 14"/><path d="M20 19v-5h-5"/></svg>
+          </button>
+        </section>
+
+        <div class="source-toolbar" id="source-toolbar" aria-label="ربط مصادر إضافية">
+          <div class="source-toolbar-copy">
+            <span class="live-pulse" aria-hidden="true"></span>
+            <div><strong>ذكاء متعدد المصادر</strong><small id="source-summary">المصدر الحالي جاهز</small></div>
+          </div>
+          <div class="source-toolbar-actions">
+            <button class="source-action-button" type="button" data-action="collect-tabs" title="دمج سياق الصفحات المفتوحة في المشروع">＋ دمج الصفحات</button>
+            <button class="source-clear-button" type="button" data-action="clear-sources" aria-label="إزالة المصادر الإضافية" title="إزالة المصادر الإضافية" hidden>×</button>
+          </div>
+        </div>
+
+        <section class="ai-bridge-card" id="ai-bridge-card" aria-label="ربط محادثة الذكاء الاصطناعي المفتوحة">
+          <div class="ai-bridge-header">
+            <div class="ai-bridge-icon" aria-hidden="true">AI</div>
+            <div class="ai-bridge-title">
+              <div class="ai-bridge-label-row"><span>محادثة AI المفتوحة</span><span class="provider-badge" id="ai-provider-badge">غير مكتشفة</span></div>
+              <strong id="ai-chat-title">افتح ChatGPT أو Gemini أو Claude</strong>
+              <small id="ai-chat-status">يمكن للوكيل قراءة المحادثة ومتابعة المشروع معك.</small>
+            </div>
+            <button class="context-refresh" type="button" data-action="refresh-ai-chat" aria-label="تحديث محادثة AI" title="تحديث الحالة">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-14.7-3L4 10"/><path d="M4 5v5h5M4 13a8.1 8.1 0 0 0 14.7 3L20 14"/><path d="M20 19v-5h-5"/></svg>
+            </button>
+          </div>
+          <div class="ai-bridge-actions">
+            <button class="bridge-secondary-button" type="button" data-action="import-ai-chat">استيراد المحادثة</button>
+            <button class="bridge-primary-button" id="autopilot-button" type="button" data-action="autopilot-start">بدء الاستكمال التلقائي</button>
+          </div>
+          <div class="autopilot-config">
+            <label for="autopilot-goal">هدف الاستكمال</label>
+            <input id="autopilot-goal" type="text" placeholder="اتركه فارغاً لاستخدام هدف المشروع" maxlength="1000" />
+            <label for="autopilot-max-turns">الحد الآمن للدورات</label>
+            <select id="autopilot-max-turns">
+              <option value="3">3 دورات</option>
+              <option value="5" selected>5 دورات</option>
+              <option value="10">10 دورات</option>
+              <option value="20">20 دورة</option>
+            </select>
+          </div>
+          <div class="autopilot-progress" id="autopilot-progress" hidden>
+            <span class="autopilot-progress-dot" aria-hidden="true"></span>
+            <span id="autopilot-progress-text">الوكيل ينسق الخطوة التالية…</span>
+            <button class="autopilot-pause" type="button" data-action="autopilot-pause">إيقاف مؤقت</button>
+          </div>
+        </section>
+
+        <section class="chat-region" id="chat-region" aria-live="polite">
+          <div class="empty-state" id="empty-state">
+            <div class="empty-orbit" aria-hidden="true"><span>✦</span></div>
+            <p class="empty-kicker">مرحباً بك في مساحة مشروعك</p>
+            <h2>نكمل من حيث توقفت؟</h2>
+            <p class="empty-description">سأفهم الصفحة الحالية، أربط المصادر المفتوحة، وأحوّل الخطوة التالية إلى قرار وخطة واضحة.</p>
+            <div class="quick-prompts" aria-label="اقتراحات بداية سريعة">
+              <button type="button" class="quick-prompt" data-action="quick-prompt" data-prompt="حلّل الصفحة الحالية واذكر أهم ما يفيد مشروعي، ثم اقترح الخطوة التالية."><span>✧</span> حلّل الصفحة الحالية</button>
+              <button type="button" class="quick-prompt" data-action="quick-prompt" data-prompt="حوّل هدفي الحالي إلى خطة تنفيذ من خمس خطوات مرتبة حسب الأولوية."><span>↗</span> ابنِ خطة تنفيذ</button>
+              <button type="button" class="quick-prompt" data-action="quick-prompt" data-prompt="راجع ما وصلنا إليه في المشروع وحدد الفجوات والقرار الذي يجب أن أتخذه الآن."><span>◌</span> راجع التقدم</button>
+              <button type="button" class="quick-prompt" data-action="quick-prompt" data-prompt="ابحث عن أحدث المعلومات المرتبطة بالصفحة الحالية، قارن المصادر، وقدّم خلاصة موثقة مع روابطها."><span>⌁</span> ابحث ووجّهني</button>
+              <button type="button" class="quick-prompt" data-action="quick-prompt" data-prompt="حلّل الكود أو البنية الظاهرة، اكتشف المخاطر، ثم اكتب تحسيناً احترافياً مع طريقة اختبار واضحة."><span>⌘</span> راجع تقنياً</button>
+            </div>
+          </div>
+          <div class="messages-list" id="messages-list" hidden></div>
+          <div class="typing-row" id="typing-row" hidden>
+            <div class="assistant-avatar small-avatar">✦</div>
+            <div class="typing-bubble"><span></span><span></span><span></span><em>الوكيل يفكر…</em></div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="composer-area">
+        <div class="composer-shell" id="composer-shell">
+          <textarea id="message-input" rows="1" maxlength="12000" placeholder="اكتب رسالتك… اسأل عن الصفحة أو مشروعك" aria-label="رسالتك"></textarea>
+          <div class="composer-toolbar">
+            <div class="composer-hints">
+              <button class="tool-button" type="button" data-action="export" title="تصدير المحادثة">⇩ <span>تصدير</span></button>
+              <button class="tool-button" type="button" data-action="clear-chat" title="مسح محادثة المشروع">⌘ <span>مسح</span></button>
+              <span class="keyboard-hint">Ctrl / ⌘ + Enter للإرسال</span>
+            </div>
+            <button class="send-button" id="send-button" type="button" data-action="send" aria-label="إرسال الرسالة">
+              <span id="send-label">إرسال</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 8-16 8 3-8-3-8Z"/><path d="M7 12h13"/></svg>
+            </button>
+          </div>
+        </div>
+        <p class="composer-disclaimer">مدعوم بتقنيات Gemini الحديثة · قد يخطئ الذكاء الاصطناعي، فراجع القرارات والكود قبل اعتمادها.</p>
+      </footer>
+    </div>
+
+    <div class="drawer-layer" id="settings-layer" hidden>
+      <div class="drawer-backdrop" data-action="settings-close"></div>
+      <aside class="settings-drawer" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="drawer-header">
+          <div><p class="section-eyebrow">التكوين الحديث</p><h2 id="settings-title">إعدادات الوكيل</h2></div>
+          <button class="icon-button" type="button" data-action="settings-close" aria-label="إغلاق الإعدادات">×</button>
+        </div>
+        <div class="settings-scroll">
+          <div class="setting-group primary-setting">
+            <label for="provider-mode">محرك النماذج المجانية</label>
+            <p class="setting-help">Auto يبدّل بين المزودين عند نفاد الحصة ويحافظ على كامل سياق المشروع.</p>
+            <select id="provider-mode">
+              <option value="auto">Auto · تبديل ذكي</option>
+              <option value="gemini">Google AI Studio</option>
+              <option value="openrouter">OpenRouter Free</option>
+              <option value="groq">Groq Free Tier</option>
+            </select>
+          </div>
+
+          <div class="provider-key-grid">
+            <div class="provider-key-group">
+              <label for="api-key">Gemini API Key</label>
+              <div class="secret-input-wrap"><input id="api-key" type="password" autocomplete="off" placeholder="AIza…" dir="ltr" /><button type="button" class="reveal-button" data-action="toggle-key" aria-label="إظهار أو إخفاء مفتاح Gemini">إظهار</button></div>
+              <a class="external-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio ↗</a>
+            </div>
+            <div class="provider-key-group">
+              <label for="openrouter-api-key">OpenRouter API Key</label>
+              <input id="openrouter-api-key" type="password" autocomplete="off" placeholder="sk-or-v1-…" dir="ltr" />
+              <a class="external-link" href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">OpenRouter Keys ↗</a>
+            </div>
+            <div class="provider-key-group">
+              <label for="groq-api-key">Groq API Key</label>
+              <input id="groq-api-key" type="password" autocomplete="off" placeholder="gsk_…" dir="ltr" />
+              <a class="external-link" href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">Groq Console ↗</a>
+            </div>
+          </div>
+
+          <div class="setting-divider"></div>
+          <div class="setting-group">
+            <label for="model-name">اسم النموذج</label>
+            <p class="setting-help">اختر نموذجاً من القائمة. النموذج الاحتياطي الاقتصادي هو Flash-Lite عند عدم توفر النموذج الأساسي.</p>
+            <select id="model-name" aria-label="اختر نموذج Gemini">
+              <option value="gemini-3.7-flash">Gemini 3.7 Flash · الأحدث</option>
+              <option value="gemini-3.6-flash">Gemini 3.6 Flash · متقدم</option>
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash · متوازن</option>
+              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite · اقتصادي</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash · متوافق</option>
+              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite · للحصة المجانية</option>
+            </select>
+          </div>
+
+          <div class="provider-model-grid">
+            <div class="setting-group">
+              <label for="openrouter-model">نموذج OpenRouter المجاني</label>
+              <select id="openrouter-model">
+                <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B · :free</option>
+                <option value="meta-llama/llama-3.1-8b-instruct:free">Llama 3.1 8B · :free</option>
+                <option value="google/gemma-3-27b-it:free">Gemma 3 27B · :free</option>
+                <option value="mistralai/mistral-7b-instruct:free">Mistral 7B · :free</option>
+              </select>
+            </div>
+            <div class="setting-group">
+              <label for="groq-model">نموذج Groq المجاني</label>
+              <select id="groq-model">
+                <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+                <option value="llama-3.1-8b-instant">Llama 3.1 8B</option>
+                <option value="gemma2-9b-it">Gemma 2 9B</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <label for="agent-mode">أسلوب الوكيل</label>
+            <select id="agent-mode">
+              <option value="project">مدير مشروع ومهندس مساعد</option>
+              <option value="developer">مهندس برمجيات</option>
+              <option value="reviewer">مراجع دقيق</option>
+              <option value="content">مخطط محتوى</option>
+            </select>
+          </div>
+
+          <div class="setting-group">
+            <label for="thinking-level">عمق التفكير والاستدلال</label>
+            <p class="setting-help">يوازن بين سرعة الرد وجودة التخطيط والتحليل في النماذج الحديثة.</p>
+            <select id="thinking-level">
+              <option value="low">سريع — للمهام المباشرة</option>
+              <option value="medium">متوازن — موصى به</option>
+              <option value="high">عميق — للكود والمشاريع المعقدة</option>
+            </select>
+          </div>
+
+          <div class="setting-group range-group">
+            <div class="setting-label-line"><label for="temperature">مرونة الإجابة</label><output id="temperature-value">0.35</output></div>
+            <input id="temperature" type="range" min="0.1" max="1" step="0.05" value="0.35" />
+            <div class="range-labels"><span>دقيق</span><span>إبداعي</span></div>
+          </div>
+
+          <div class="setting-divider"></div>
+          <div class="tech-note"><span>✦</span><div><strong>محرك Free-Tier متعدد المزودين</strong><p>Gemini + OpenRouter :free + Groq مع تبديل ذكي وحفظ كامل للسياق.</p></div></div>
+          <div class="setting-group toggles-group capability-toggles">
+            <label class="toggle-row" for="free-only">
+              <span><strong>حظر النماذج المدفوعة</strong><small>لا يسمح المحرك بأي نموذج غير مثبت كمجاني</small></span>
+              <input id="free-only" type="checkbox" checked disabled /><i aria-hidden="true"></i>
+            </label>
+            <label class="toggle-row" for="auto-fallback">
+              <span><strong>التبديل التلقائي عند الحد</strong><small>انتقل للمزود المجاني التالي مع الحفاظ على السياق</small></span>
+              <input id="auto-fallback" type="checkbox" checked /><i aria-hidden="true"></i>
+            </label>
+            <label class="toggle-row" for="use-web-search">
+              <span><strong>بحث مباشر في Google</strong><small>تحقق من الأخبار والإصدارات والمعلومات المتغيرة</small></span>
+              <input id="use-web-search" type="checkbox" checked /><i aria-hidden="true"></i>
+            </label>
+            <label class="toggle-row" for="use-url-context">
+              <span><strong>قراءة الروابط بعمق</strong><small>استخدم صفحات عامة كمراجع إضافية</small></span>
+              <input id="use-url-context" type="checkbox" checked /><i aria-hidden="true"></i>
+            </label>
+            <label class="toggle-row" for="use-code-execution">
+              <span><strong>تحقق حسابي آمن</strong><small>تشغيل Python داخل بيئة Google للتحقق من الحسابات</small></span>
+              <input id="use-code-execution" type="checkbox" /><i aria-hidden="true"></i>
+            </label>
+            <label class="toggle-row" for="use-streaming">
+              <span><strong>الرد المتدفق</strong><small>ابدأ القراءة فور وصول أول جزء من الإجابة</small></span>
+              <input id="use-streaming" type="checkbox" checked /><i aria-hidden="true"></i>
+            </label>
+          </div>
+
+          <div class="setting-divider"></div>
+          <div class="setting-group toggles-group">
+            <label class="toggle-row" for="include-page-context">
+              <span><strong>إدراج سياق الصفحة تلقائياً</strong><small>العنوان والمحتوى والروابط مع كل طلب</small></span>
+              <input id="include-page-context" type="checkbox" checked /><i aria-hidden="true"></i>
+            </label>
+            <label class="toggle-row" for="include-selection">
+              <span><strong>إدراج النص المحدد</strong><small>النص الذي تحدده داخل الصفحة</small></span>
+              <input id="include-selection" type="checkbox" checked /><i aria-hidden="true"></i>
+            </label>
+          </div>
+
+          <div class="privacy-note"><span>⌁</span><p>المفاتيح والمحادثات محفوظة محلياً. المحرك لا يرسل طلباً لنموذج مدفوع عند تفعيل الحظر المجاني. راجع شروط كل مزود وحدوده قبل الاستخدام.</p></div>
+        </div>
+        <div class="drawer-footer">
+          <button class="secondary-button" type="button" data-action="settings-close">إلغاء</button>
+          <button class="primary-button" type="button" data-action="settings-save">حفظ الإعدادات</button>
+        </div>
+      </aside>
+    </div>
+
+    <div class="modal-layer" id="project-layer" hidden>
+      <form class="project-modal" id="project-form">
+        <button class="modal-close" type="button" data-action="project-close" aria-label="إغلاق">×</button>
+        <div class="modal-icon" aria-hidden="true">✦</div>
+        <p class="section-eyebrow">مساحة جديدة</p>
+        <h2>أنشئ مشروعاً جديداً</h2>
+        <p class="modal-description">سأحتفظ بمحادثة كل مشروع منفصلة حتى نعود إليها في أي وقت.</p>
+        <label for="project-name">اسم المشروع</label>
+        <input id="project-name" name="name" type="text" maxlength="100" placeholder="مثال: إطلاق المتجر الإلكتروني" required />
+        <label for="project-brief">ملخص اختياري</label>
+        <textarea id="project-brief" name="brief" rows="4" maxlength="3000" placeholder="ما الهدف؟ وما الذي تريد بناءه؟"></textarea>
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" data-action="project-close">إلغاء</button>
+          <button class="primary-button" type="submit">بدء المشروع</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>
