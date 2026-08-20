@@ -1,3 +1,4 @@
+import { AutopilotCoordinator } from './src/agents/autopilot-coordinator.js';
 import { ProfessionalProjectAgent } from './src/agents/professional-project-agent.js';
 import { GeminiApiError } from './src/lib/gemini-client.js';
 import {
@@ -28,11 +29,20 @@ const state = {
   activeProjectId: null,
   pageContext: null,
   additionalPageContexts: [],
+  aiChatState: null,
+  aiChatLoading: false,
   activeTabId: null,
   contextLoading: false,
   sourcesLoading: false,
   isGenerating: false,
   abortController: null,
+  autopilot: {
+    running: false,
+    turn: 0,
+    maxTurns: 5,
+    goal: '',
+    controller: null
+  },
   toastTimer: null,
   rateLimitUntil: 0,
   rateLimitTimer: null,
@@ -179,6 +189,48 @@ function renderSourceToolbar() {
   collectButton.disabled = state.sourcesLoading || !hasChrome;
   collectButton.classList.toggle('loading', state.sourcesLoading);
   if (clearButton) clearButton.hidden = state.additionalPageContexts.length === 0;
+}
+
+function renderAiBridge() {
+  const chat = state.aiChatState;
+  const card = $('#ai-bridge-card');
+  const providerBadge = $('#ai-provider-badge');
+  const title = $('#ai-chat-title');
+  const status = $('#ai-chat-status');
+  const refresh = $('[data-action="refresh-ai-chat"]');
+  const importButton = $('[data-action="import-ai-chat"]');
+  const startButton = $('#autopilot-button');
+  const progress = $('#autopilot-progress');
+  const progressText = $('#autopilot-progress-text');
+  if (!card || !providerBadge || !title || !status) return;
+
+  refresh.classList.toggle('loading', state.aiChatLoading);
+  if (state.aiChatLoading) {
+    providerBadge.textContent = 'جارٍ الفحص';
+    title.textContent = 'نبحث عن محادثة AI في الصفحة';
+    status.textContent = 'يتم التحقق من المنصة والمحرر والرسائل الحالية…';
+  } else if (!chat || !chat.available || !chat.supported) {
+    providerBadge.textContent = chat?.providerLabel || 'غير مكتشفة';
+    title.textContent = chat?.title || 'افتح ChatGPT أو Gemini أو Claude';
+    status.textContent = chat?.available === false
+      ? 'لا يمكن قراءة هذه الصفحة المحمية.'
+      : 'افتح محادثة AI في تبويب نشط، ثم اضغط تحديث الحالة.';
+  } else {
+    providerBadge.textContent = chat.providerLabel || chat.provider;
+    title.textContent = chat.title || 'محادثة AI جاهزة';
+    status.textContent = `${chat.messageCount || 0} رسالة · ${chat.busy ? 'المساعد يكتب الآن' : 'جاهزة للاستكمال'}`;
+  }
+
+  const ready = Boolean(chat?.supported && !chat.busy);
+  importButton.disabled = !chat?.supported || state.aiChatLoading;
+  startButton.disabled = (!ready && !state.autopilot.running) || state.aiChatLoading;
+  startButton.textContent = state.autopilot.running ? 'إيقاف الاستكمال' : 'بدء الاستكمال التلقائي';
+  card.classList.toggle('bridge-ready', ready);
+  card.classList.toggle('bridge-running', state.autopilot.running);
+  progress.hidden = !state.autopilot.running;
+  if (state.autopilot.running) {
+    progressText.textContent = `الدورة ${state.autopilot.turn} من ${state.autopilot.maxTurns} · ${state.autopilot.goal || 'هدف المشروع'}`;
+  }
 }
 
 function renderPageContext() {
@@ -339,6 +391,7 @@ function render() {
   renderProjectControls();
   renderSetupNotice();
   renderPageContext();
+  renderAiBridge();
   renderChat();
   renderComposer();
 }
@@ -365,6 +418,211 @@ async function getTabContext(tab) {
         reason: 'protected-page'
       };
     }
+  }
+}
+
+async function refreshAiChat({ silent = false } = {}) {
+  if (!hasChrome) {
+    state.aiChatState = {
+      available: true,
+      supported: false,
+      provider: 'preview',
+      providerLabel: 'معاينة',
+      title: 'المعاينة المحلية لا تحتوي على محادثة AI خارجية',
+      messages: [],
+      messageCount: 0,
+      busy: false
+    };
+    renderAiBridge();
+    return state.aiChatState;
+  }
+
+  state.aiChatLoading = true;
+  renderAiBridge();
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (!tab?.id) throw new Error('لا يوجد تبويب نشط');
+    state.activeTabId = tab.id;
+    let chat;
+    try {
+      chat = await chrome.tabs.sendMessage(tab.id, { type: 'AI_CHAT_GET_STATE' });
+    } catch {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+      chat = await chrome.tabs.sendMessage(tab.id, { type: 'AI_CHAT_GET_STATE' });
+    }
+    state.aiChatState = chat;
+    if (!silent && chat?.supported) showToast(`تم اكتشاف ${chat.providerLabel || 'محادثة AI'} بنجاح.`);
+  } catch (error) {
+    state.aiChatState = {
+      available: false,
+      supported: false,
+      provider: 'unknown',
+      providerLabel: 'غير متاحة',
+      title: 'لا يمكن الوصول إلى محادثة AI في هذا التبويب',
+      messages: [],
+      messageCount: 0,
+      reason: error.message
+    };
+    if (!silent) showToast('افتح تبويب ChatGPT أو Gemini أو Claude ثم اضغط تحديث الحالة.', { error: true });
+  } finally {
+    state.aiChatLoading = false;
+    renderAiBridge();
+  }
+  return state.aiChatState;
+}
+
+async function importAiChat({ silent = false } = {}) {
+  const chat = await refreshAiChat({ silent });
+  if (!chat?.supported) return false;
+  const project = activeProject();
+  project.externalChat = {
+    provider: chat.provider,
+    providerLabel: chat.providerLabel,
+    url: chat.url,
+    title: chat.title,
+    messages: chat.messages,
+    updatedAt: Date.now()
+  };
+  touchProject(project);
+  await persist();
+  if (!silent) showToast(`تم استيراد ${chat.messageCount} رسالة إلى المشروع الحالي.`);
+  return true;
+}
+
+async function sendAiChatPrompt(prompt) {
+  if (!hasChrome || !state.activeTabId) throw new Error('لا يوجد تبويب AI نشط.');
+  const result = await chrome.tabs.sendMessage(state.activeTabId, {
+    type: 'AI_CHAT_SEND_PROMPT',
+    prompt
+  });
+  if (!result?.ok) throw new Error(result?.reason || 'تعذر إرسال الرسالة إلى محادثة AI.');
+  return result.state;
+}
+
+async function waitForAiChatResponse(baseline, timeoutMs = 90000) {
+  if (!hasChrome || !state.activeTabId) throw new Error('لا يوجد تبويب AI نشط.');
+  return chrome.tabs.sendMessage(state.activeTabId, {
+    type: 'AI_CHAT_WAIT_FOR_RESPONSE',
+    baselineCount: baseline?.messageCount || 0,
+    baselineAssistant: baseline?.lastAssistant || '',
+    timeoutMs
+  });
+}
+
+function pauseAutopilot(message = 'تم إيقاف الاستكمال التلقائي.', options = {}) {
+  if (!state.autopilot.running) return;
+  state.autopilot.running = false;
+  state.autopilot.controller?.abort();
+  state.autopilot.controller = null;
+  renderAiBridge();
+  showToast(message, options);
+}
+
+async function startAutopilot() {
+  if (state.autopilot.running) {
+    pauseAutopilot();
+    return;
+  }
+  if (state.isGenerating) {
+    showToast('انتظر انتهاء رد Project Agent الحالي قبل تشغيل الاستكمال التلقائي.', { error: true });
+    return;
+  }
+  if (!state.settings.apiKey) {
+    setSettingsLayer(true);
+    showToast('أضف مفتاح Gemini ليقوم المنسق بإدارة دورات الاستكمال.', { error: true });
+    return;
+  }
+
+  const chat = await refreshAiChat();
+  if (!chat?.supported) {
+    showToast('لم يتم اكتشاف محرر محادثة AI قابل للإرسال في التبويب الحالي.', { error: true });
+    return;
+  }
+  if (chat.busy) {
+    showToast('محادثة AI ما زالت تولّد رداً. انتظر حتى تنتهي ثم ابدأ الاستكمال.', { error: true });
+    return;
+  }
+
+  const project = activeProject();
+  const goal = ($('#autopilot-goal').value || project?.brief || '').trim();
+  const maxTurns = Math.min(20, Math.max(1, Number($('#autopilot-max-turns').value) || 5));
+  state.autopilot = {
+    running: true,
+    turn: 0,
+    maxTurns,
+    goal,
+    controller: new AbortController()
+  };
+  renderAiBridge();
+  showToast('بدأ الوكيل تنسيق الاستكمال. يمكنك إيقافه في أي وقت.');
+  runAutopilotLoop().catch((error) => {
+    if (state.autopilot.running) showToast(`توقف الاستكمال: ${error.message}`, { error: true });
+    state.autopilot.running = false;
+    state.autopilot.controller = null;
+    renderAiBridge();
+  });
+}
+
+async function runAutopilotLoop() {
+  const coordinator = new AutopilotCoordinator(state.settings);
+  const project = activeProject();
+  let chat = state.aiChatState;
+
+  while (state.autopilot.running && state.autopilot.turn < state.autopilot.maxTurns) {
+    state.autopilot.turn += 1;
+    renderAiBridge();
+    chat = await refreshAiChat({ silent: true });
+    if (!state.autopilot.running) break;
+    if (!chat?.supported) throw new Error('فقدت الإضافة اتصالها بمحرر محادثة AI.');
+    if (chat.busy) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      state.autopilot.turn -= 1;
+      continue;
+    }
+
+    const plan = await coordinator.nextStep({
+      project,
+      chatState: chat,
+      goal: state.autopilot.goal,
+      turn: state.autopilot.turn,
+      maxTurns: state.autopilot.maxTurns,
+      signal: state.autopilot.controller.signal
+    });
+    if (!state.autopilot.running) break;
+
+    if (plan.status === 'done') {
+      pauseAutopilot(`أعلن المنسق اكتمال المشروع بعد ${state.autopilot.turn} دورات.`);
+      return;
+    }
+    if (plan.status === 'blocked') {
+      pauseAutopilot(`توقف الوكيل بسبب عائق: ${plan.blocker || 'يحتاج قراراً من المستخدم.'}`);
+      return;
+    }
+    if (!plan.nextPrompt) {
+      pauseAutopilot('لم ينتج المنسق خطوة تالية قابلة للإرسال.');
+      return;
+    }
+
+    const baseline = chat;
+    const prompt = `${plan.nextPrompt}\n\nتعليمات Project Agent: نفّذ هذه الخطوة الآن داخل مشروعنا، ثم اذكر النتيجة والدليل أو الاختبار. لا تعلن اكتمال المشروع إلا بعد تحقق واضح.`;
+    await sendAiChatPrompt(prompt);
+    renderAiBridge();
+    const waited = await waitForAiChatResponse(baseline, 120000);
+    if (!state.autopilot.running) break;
+    state.aiChatState = waited?.state || await refreshAiChat({ silent: true });
+    if (waited?.timedOut) {
+      pauseAutopilot('انتهى وقت انتظار رد محادثة AI. تحقق من التبويب ثم أعد التشغيل.', { error: true });
+      return;
+    }
+    await importAiChat({ silent: true });
+  }
+
+  if (state.autopilot.running) {
+    state.autopilot.running = false;
+    state.autopilot.controller = null;
+    renderAiBridge();
+    showToast('تم الوصول إلى الحد الآمن للدورات. راجع النتيجة ثم شغّل دورة جديدة عند الحاجة.');
   }
 }
 
@@ -539,6 +797,7 @@ async function sendMessage(value) {
       project,
       pageContext: state.pageContext,
       additionalPageContexts: state.additionalPageContexts,
+      aiChatContext: state.aiChatState?.supported ? state.aiChatState : project.externalChat,
       signal: state.abortController.signal,
       onDelta: (delta) => {
         assistantMessage.content += delta;
@@ -713,6 +972,10 @@ function handleClick(event) {
   if (action === 'project-close') setProjectLayer(false);
   if (action === 'project-delete') deleteCurrentProject();
   if (action === 'refresh-context') refreshPageContext();
+  if (action === 'refresh-ai-chat') refreshAiChat();
+  if (action === 'import-ai-chat') importAiChat();
+  if (action === 'autopilot-start') startAutopilot();
+  if (action === 'autopilot-pause') pauseAutopilot();
   if (action === 'collect-tabs') collectOpenTabContexts();
   if (action === 'clear-sources') clearAdditionalContexts();
   if (action === 'clear-chat') clearCurrentChat();
@@ -756,12 +1019,19 @@ function bindEvents() {
   });
 
   if (hasChrome) {
-    chrome.tabs.onActivated.addListener(() => refreshPageContext({ clearAdditional: true }));
+    chrome.tabs.onActivated.addListener(() => {
+      refreshPageContext({ clearAdditional: true });
+      refreshAiChat({ silent: true });
+    });
     chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-      if (tabId === state.activeTabId && changeInfo.status === 'complete') refreshPageContext();
+      if (tabId === state.activeTabId && changeInfo.status === 'complete') {
+        refreshPageContext();
+        refreshAiChat({ silent: true });
+      }
     });
     chrome.runtime.onMessage.addListener((message) => {
       if (message?.type === 'REFRESH_PAGE_CONTEXT') refreshPageContext();
+      if (message?.type === 'REFRESH_AI_CHAT') refreshAiChat({ silent: true });
     });
   }
 }
@@ -774,6 +1044,7 @@ async function init() {
   bindEvents();
   render();
   await refreshPageContext();
+  await refreshAiChat({ silent: true });
 
   const pending = await loadPendingPrompt();
   if (pending) {

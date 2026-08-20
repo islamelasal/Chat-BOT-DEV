@@ -79,6 +79,40 @@
           </div>
         </div>
 
+        <section class="ai-bridge-card" id="ai-bridge-card" aria-label="ربط محادثة الذكاء الاصطناعي المفتوحة">
+          <div class="ai-bridge-header">
+            <div class="ai-bridge-icon" aria-hidden="true">AI</div>
+            <div class="ai-bridge-title">
+              <div class="ai-bridge-label-row"><span>محادثة AI المفتوحة</span><span class="provider-badge" id="ai-provider-badge">غير مكتشفة</span></div>
+              <strong id="ai-chat-title">افتح ChatGPT أو Gemini أو Claude</strong>
+              <small id="ai-chat-status">يمكن للوكيل قراءة المحادثة ومتابعة المشروع معك.</small>
+            </div>
+            <button class="context-refresh" type="button" data-action="refresh-ai-chat" aria-label="تحديث محادثة AI" title="تحديث الحالة">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-14.7-3L4 10"/><path d="M4 5v5h5M4 13a8.1 8.1 0 0 0 14.7 3L20 14"/><path d="M20 19v-5h-5"/></svg>
+            </button>
+          </div>
+          <div class="ai-bridge-actions">
+            <button class="bridge-secondary-button" type="button" data-action="import-ai-chat">استيراد المحادثة</button>
+            <button class="bridge-primary-button" id="autopilot-button" type="button" data-action="autopilot-start">بدء الاستكمال التلقائي</button>
+          </div>
+          <div class="autopilot-config">
+            <label for="autopilot-goal">هدف الاستكمال</label>
+            <input id="autopilot-goal" type="text" placeholder="اتركه فارغاً لاستخدام هدف المشروع" maxlength="1000" />
+            <label for="autopilot-max-turns">الحد الآمن للدورات</label>
+            <select id="autopilot-max-turns">
+              <option value="3">3 دورات</option>
+              <option value="5" selected>5 دورات</option>
+              <option value="10">10 دورات</option>
+              <option value="20">20 دورة</option>
+            </select>
+          </div>
+          <div class="autopilot-progress" id="autopilot-progress" hidden>
+            <span class="autopilot-progress-dot" aria-hidden="true"></span>
+            <span id="autopilot-progress-text">الوكيل ينسق الخطوة التالية…</span>
+            <button class="autopilot-pause" type="button" data-action="autopilot-pause">إيقاف مؤقت</button>
+          </div>
+        </section>
+
         <section class="chat-region" id="chat-region" aria-live="polite">
           <div class="empty-state" id="empty-state">
             <div class="empty-orbit" aria-hidden="true"><span>✦</span></div>

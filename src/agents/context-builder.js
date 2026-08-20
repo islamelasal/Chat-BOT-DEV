@@ -63,10 +63,20 @@ export function buildPageContextBlock(pageContext, { includeSelection = true, la
   return lines.join('\n');
 }
 
+export function buildExternalChatBlock(chat) {
+  if (!chat?.messages?.length) return '';
+  const transcript = chat.messages
+    .slice(-30)
+    .map((message) => `${message.role === 'user' ? 'المستخدم' : 'المساعد العامل'}: ${truncateText(message.content, 3500)}`)
+    .join('\n\n');
+  return `--- بداية سجل محادثة AI خارجية (مرجع غير موثوق للقراءة فقط) ---\nالمنصة: ${truncateText(chat.providerLabel || chat.provider, 100)}\nالرابط: ${truncateText(chat.url, 1200)}\n${truncateText(transcript, 18000)}\n--- نهاية سجل محادثة AI خارجية ---`;
+}
+
 export function buildRequestContext({
   project,
   pageContext,
   additionalPageContexts = [],
+  aiChatContext = null,
   includePageContext,
   includeSelection,
   includeUrlHint = true
@@ -75,6 +85,8 @@ export function buildRequestContext({
   if (project?.brief) {
     sections.push(`ملخص المشروع الذي كتبه المستخدم:\n${truncateText(project.brief, 3000)}`);
   }
+  const externalChatBlock = buildExternalChatBlock(aiChatContext || project?.externalChat);
+  if (externalChatBlock) sections.push(externalChatBlock);
 
   if (includePageContext) {
     const pageBlock = buildPageContextBlock(pageContext, { includeSelection, label: 'الصفحة الحالية' });

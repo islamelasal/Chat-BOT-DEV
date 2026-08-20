@@ -37,6 +37,7 @@ export function createProject(name = 'مشروعي الجديد', brief = '') {
     brief: String(brief).trim(),
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    externalChat: null,
     messages: []
   };
 }
@@ -118,6 +119,29 @@ function normalizeMessage(message) {
   };
 }
 
+function normalizeExternalChat(chat) {
+  if (!chat || typeof chat !== 'object') return null;
+  const messages = Array.isArray(chat.messages)
+    ? chat.messages
+      .filter((message) => message && ['user', 'assistant'].includes(message.role))
+      .map((message) => ({
+        role: message.role,
+        content: String(message.content || '').slice(0, 10000)
+      }))
+      .filter((message) => message.content)
+      .slice(-40)
+    : [];
+  if (!messages.length && !chat.provider) return null;
+  return {
+    provider: String(chat.provider || 'generic').slice(0, 40),
+    providerLabel: String(chat.providerLabel || chat.provider || 'AI').slice(0, 100),
+    url: String(chat.url || '').slice(0, 2000),
+    title: String(chat.title || '').slice(0, 240),
+    messages,
+    updatedAt: Number(chat.updatedAt || chat.observedAt) || Date.now()
+  };
+}
+
 function normalizeProject(project) {
   if (!project || typeof project !== 'object') return null;
   const messages = Array.isArray(project.messages)
@@ -130,6 +154,7 @@ function normalizeProject(project) {
     brief: String(project.brief || '').slice(0, 3000),
     createdAt: Number(project.createdAt) || Date.now(),
     updatedAt: Number(project.updatedAt) || Date.now(),
+    externalChat: normalizeExternalChat(project.externalChat),
     messages
   };
 }

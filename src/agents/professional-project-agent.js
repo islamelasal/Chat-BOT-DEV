@@ -53,6 +53,7 @@ export class ProfessionalProjectAgent {
     project,
     pageContext,
     additionalPageContexts = [],
+    aiChatContext = null,
     signal,
     onDelta
   } = {}) {
@@ -71,6 +72,7 @@ export class ProfessionalProjectAgent {
       project,
       pageContext,
       additionalPageContexts,
+      aiChatContext,
       includePageContext: this.settings.includePageContext !== false,
       includeSelection: this.settings.includeSelection !== false,
       includeUrlHint: this.settings.urlContext !== false
