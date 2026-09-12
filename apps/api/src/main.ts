@@ -16,6 +16,9 @@ import { startWorkerAll } from '@cbd/worker-core';
 import { AppModule } from './app.module.js';
 import { config } from './config.js';
 import { GatewayService } from './gateway.service.js';
+import { CatalogService } from './catalog.service.js';
+import { WebhooksService } from './webhooks.service.js';
+import { decryptSecret } from './crypto.js';
 
 async function bootstrap() {
   // 1) قاعدة البيانات + البذرة
@@ -41,7 +44,7 @@ async function bootstrap() {
 
   // 3) ملفات ثابتة: محمّل الودجت w.js + حزمة الودجت المبنية
   const publicDir = [
-    join(__dirname, 'public'),
+    join(import.meta.dirname, 'public'),
     join(process.cwd(), 'public'),
     join(process.cwd(), 'apps/api/src/public'),
     join(process.cwd(), 'src/public'),
@@ -88,7 +91,6 @@ async function bootstrap() {
       retentionDays: config.RETENTION_DAYS,
       decrypt: (enc: string) => {
         // فك التشفير عبر نفس أداة الـ API
-        const { decryptSecret } = require('./crypto.js') as typeof import('./crypto.js');
         return decryptSecret(enc);
       },
       health: gateway.health,
@@ -103,11 +105,9 @@ async function bootstrap() {
   }
 
   // 4.5) معالج Webhooks الصادرة — يعمل دائماً حتى واللوحة مغلقة
-  const { WebhooksService } = require('./webhooks.service.js') as typeof import('./webhooks.service.js');
   app.get(WebhooksService).startPolling();
 
   // 5) جدولة مزامنة كتالوجات العملاء (الفيد الحي) — تعمل دائماً حتى واللوحة مغلقة
-  const { CatalogService } = require('./catalog.service.js') as typeof import('./catalog.service.js');
   const catalogService = app.get(CatalogService);
   if (config.CATALOG_SYNC_ON_BOOT) {
     setTimeout(() => {

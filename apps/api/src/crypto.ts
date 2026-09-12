@@ -7,6 +7,7 @@
 import {
   createCipheriv,
   createDecipheriv,
+  createHash,
   createHmac,
   randomBytes,
   timingSafeEqual,
@@ -16,7 +17,7 @@ import { config } from './config.js';
 const encKey = (): Buffer => {
   const key = config.ENCRYPTION_KEY;
   // نشتق مفتاح 32 بايت من أي سلسلة
-  return Buffer.from(require('node:crypto').createHash('sha256').update(key).digest());
+  return Buffer.from(createHash('sha256').update(key).digest());
 };
 
 export function encryptSecret(plain: string): string {

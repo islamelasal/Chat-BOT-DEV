@@ -49,6 +49,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-https://app.chatbotdev.app}
       SCRAPLING_URL: ${SCRAPLING_URL:-http://scrapling:4100}
       CRAWL_ALLOW_PRIVATE: 'false'
+      WEBHOOK_ALLOW_PRIVATE: 'false'
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     depends_on:

@@ -8,17 +8,19 @@
 
 | الطبقة | الاختيار | لماذا |
 |---|---|---|
-| اللغة | **TypeScript بالكامل** (strict mode) | لغة واحدة للوحة + الخادم + العامل + الودجت = أنواع مشتركة (packages/shared) تمنع أخطاء العقود بين الطبقات |
-| Monorepo | **pnpm workspaces + Turborepo** | عزل الخدمات مع إعادة استخدام كود، بناء متوازٍ سريع |
-| لوحة التحكم | **Next.js 15 (App Router) + React 19 + Tailwind v4 + shadcn/ui + TanStack Query + Zustand** | RSC للأداء، دعم RTL ممتاز، نظام مكونات جاهز، SSR مفيد لصفحات التقارير |
-| خدمة API | **NestJS 11 (Fastify adapter) + Prisma + ioredis + BullMQ** | معمارية وحدات (Modules/Guards/Interceptors) مثالية للتعددية المستأجرة، جاهزية REST + WebSocket |
-| العامل الخلفي | **نفس كود NestJS بعملية منفصلة** (Queue Workers + Schedulers) | قاعدة كود واحدة، عمليات منفصلة: `api` و `worker` |
-| الودجت | **TypeScript + Preact (≈4KB) + Vite** → ملف IIFE واحد ~45KB gz | حجم صغير، بدون تبعيات في صفحة العميل، Shadow DOM + iframe معزول |
-| قاعدة البيانات | **PostgreSQL 16 + Redis 7** | علاقاتية للمعاملات (عملاء/بوتات/فوترة)، Redis للعدادات/الطوابير/pub-sub/TTL النبضات |
-| الطوابير | **BullMQ (Redis)** | مهام مجدولة موثوقة + إعادة محاولة + جدولة cron داخل العامل |
-| CDN للودجت | **Cloudflare R2 + CDN** | ملف ودجت + إعداد ثيم JSON لكل عميل بزمن استجابة منخفض عالمياً |
-| المراقبة | **OpenTelemetry + Prometheus + Grafana + Loki + Sentry** | مقاييس/لوغات/أخطاء مركزية |
-| النشر | **Docker + Traefik** على VPS (مرحلة أولى) → جاهزية Kubernetes (لاحقاً) | تكلفة منخفضة + مسار ترقية واضح |
+| اللغة | **TypeScript 5.9 بالكامل** (strict mode + NodeNext ESM) | لغة واحدة للوحة + الخادم + العامل + الودجت = أنواع مشتركة (packages/shared) تمنع أخطاء العقود بين الطبقات |
+| Monorepo | **pnpm workspaces + Turbo 2.10** | عزل الخدمات مع إعادة استخدام كود، بناء متوازٍ سريع |
+| لوحة التحكم | **Next.js 16 (App Router) + React 19.3 + Tailwind v4.3 + lucide-react** | RSC للأداء، دعم RTL ممتاز، مكونات UI خفيفة مبنية داخلياً (بدون أطر ثقيلة) |
+| خدمة API | **NestJS 12 (Express 5 — ESM)** + zod 4 | معمارية وحدات (Modules/Guards/Interceptors) مثالية للتعددية المستأجرة؛ bodyParser مخصص لحدود 64MB |
+| العامل الخلفي | **نفس كود NestJS بعملية منفصلة** (`dist/worker-main.js`) أو داخل العملية (ديمو) | قاعدة كود واحدة، عمليات منفصلة: `api` و `worker` |
+| الودجت | **Preact 10 + Vite 8** → IIFE واحد ~28KB (gzip ~10.6KB) | حجم صغير، بدون تبعيات في صفحة العميل، iframe معزول sandbox |
+| قاعدة البيانات | **SQLite (node:sqlite) للتطوير/الديمو → PostgreSQL 16 للإنتاج** (كشف تلقائي) + **Redis 7** (اختياري للكاش) | علاقاتية للمعاملات، وترحيلات v7 آمنة للوضعين |
+| المهام الخلفية | **حلقات مجدولة + جداول طوابير في DB مع ادّعاء متفائل** (webhook_deliveries، catalog jobs) | موثوقة بدون خدمة خارجية؛ التوسع لاحقاً عبر Redis/BullMQ |
+| المراقبة | **نبضات + Dead-Man Switch + تنبيهات Telegram + صفحة /status** (OTel/Grafana مخطط) | رؤية فورية للحوادث من اليوم الأول |
+| النشر | **Docker (Node 24 LTS) + Traefik (443/TLS)** على VPS → جاهزية Kubernetes لاحقاً | تكلفة منخفضة + مسار ترقية واضح |
+
+### إصدارات المكونات — مُدقَّقة أمنياً (2026-09-12)
+راجع [AUDIT.md](./AUDIT.md): **صفر ثغرات معروفة** (`pnpm audit`)، بعد ترقيات رئيسية: NestJS 12 (ESM) · Next 16.3 · React 19.3 · zod 4.6 · Vite 8.3 · Vitest 5 · Express 5.2 · Tailwind 4.3 · Node 24 LTS (Docker) · TypeScript 5.9 (المجمع الأصلي TS 7 قيد المتابعة حتى اكتمال دعم المنظومة).
 
 ### لماذا لا Next.js للـ API الخلفي؟
 حجم أعمال المنصة (طوابير، نبضات 24/7، WS، تعددية مستأجرة عميقة) يحتاج خدمة منفصلة العمر الافتراضي عن الواجهة — فصل `api` عن `dashboard` يعني: نشر مستقل، توسع مستقل، وإعادة تشغيل اللوحة لا توقف البوتات.
