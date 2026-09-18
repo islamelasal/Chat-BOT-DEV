@@ -149,6 +149,7 @@ function setSettingsLayer(open) {
     $('#latest-standards').checked = state.settings.latestStandards;
     $('#competitor-research').checked = state.settings.competitorResearch;
     $('#quality-review').checked = state.settings.qualityReview;
+    $('#delivery-target').value = state.settings.deliveryTarget;
     $('#agent-mode').value = state.settings.agentMode;
     $('#thinking-level').value = state.settings.thinkingLevel;
     $('#temperature').value = state.settings.temperature;
@@ -1129,6 +1130,7 @@ async function saveSettingsFromForm() {
     latestStandards: $('#latest-standards').checked,
     competitorResearch: $('#competitor-research').checked,
     qualityReview: $('#quality-review').checked,
+    deliveryTarget: $('#delivery-target').value,
     model: $('#model-name').value,
     agentMode: $('#agent-mode').value,
     thinkingLevel: $('#thinking-level').value,
@@ -1197,6 +1199,8 @@ function exportCurrentProject() {
   }
   const lines = [
     `# ${project.name}`,
+    '',
+    `_هدف التسليم: ${state.settings.deliveryTarget}_`,
     '',
     project.brief ? `> ${project.brief.replace(/\n/g, '\n> ')}` : '',
     `\n_تاريخ التصدير: ${formatDate(Date.now())}_`,

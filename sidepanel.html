@@ -260,6 +260,21 @@
             </select>
           </div>
 
+          <div class="setting-group">
+            <label for="delivery-target">هدف التسليم النهائي</label>
+            <p class="setting-help">يوجه الخطة والتحويل إلى Web/PWA أو Mobile أو Desktop/WebView مع متطلبات المنصة.</p>
+            <select id="delivery-target">
+              <option value="universal">Universal · Web + Mobile + Desktop</option>
+              <option value="web-pwa">Web + PWA</option>
+              <option value="capacitor-mobile">Android + iOS عبر Capacitor</option>
+              <option value="react-native">React Native</option>
+              <option value="flutter">Flutter</option>
+              <option value="tauri">Desktop عبر Tauri</option>
+              <option value="electron">Desktop عبر Electron</option>
+              <option value="webview">Native WebView</option>
+            </select>
+          </div>
+
           <div class="setting-group toggles-group quality-toggles">
             <label class="toggle-row" for="quality-mode">
               <span><strong>وضع المنتج الحقيقي</strong><small>تسليم عملي مع اختبارات وأمان وحالات UI كاملة</small></span>

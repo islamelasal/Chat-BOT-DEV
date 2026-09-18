@@ -1,5 +1,6 @@
 import { generateAgentResponse } from '../lib/provider-engine.js';
 import { truncateText } from './context-builder.js';
+import { buildDeliveryTargetInstruction } from './platform-targets.js';
 
 const MAX_TRANSCRIPT_LENGTH = 24000;
 
@@ -44,9 +45,11 @@ function parseCoordinatorJson(text) {
   return null;
 }
 
-function coordinatorInstruction() {
+function coordinatorInstruction(settings = {}) {
   return `أنت منسق تسليم (Delivery Orchestrator) يعمل بين Project Agent ومحادثة AI مفتوحة في متصفح المستخدم.
 مهمتك ليست إعطاء جواب عام، بل فحص سجل محادثة المساعد العامل، ثم تحديد أفضل رسالة تنفيذية واحدة ترسلها له ليكمل المشروع.
+
+${buildDeliveryTargetInstruction(settings)}
 
 قواعد صارمة:
 - افترض أن المساعد العامل يستطيع تنفيذ أو شرح ما تسمح به منصته، لكنه لا يستطيع تعديل جهاز المستخدم دون أن ينسخ المستخدم الملفات أو يطبقها.
@@ -87,7 +90,7 @@ ${transcript || 'لا توجد رسائل مقروءة بعد.'}
       apiKey: this.settings.apiKey,
       model: this.settings.model,
       fallbackModel: this.settings.fallbackModel,
-      systemInstruction: coordinatorInstruction(),
+      systemInstruction: coordinatorInstruction(this.settings),
       messages: [{ role: 'user', content: prompt }],
       settings: {
         ...this.settings,

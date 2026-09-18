@@ -4,7 +4,7 @@
 
 > تم تحديث المشروع مع الاستفادة من أحدث تقنيات Gemini المتاحة وممارسات بناء الوكلاء الحديثة في Chrome Manifest V3: التفكير المتدرج، الرد المتدفق، البحث المباشر، قراءة الروابط، المراجع القابلة للفتح، وتحسين التعامل مع سياق المشاريع.
 
-## ما الجديد في الإصدار 1.5.0
+## ما الجديد في الإصدار 1.6.0
 
 - **ذكاء أعلى في طريقة الرد:** الوكيل يحدد نوع الطلب أولاً، ثم يقدم خلاصة وقراراً وخطوات تنفيذ وتحقيقاً للنتيجة والخطوة التالية.
 - **تفكير متدرج قابل للتحكم:** سريع، متوازن، أو عميق للبرمجة والمشروعات المعقدة.
@@ -93,7 +93,10 @@
 - `sidepanel.html`, `sidepanel.css`, `sidepanel.js`: الواجهة والمحادثة وإدارة المشاريع.
 - `src/agents/professional-project-agent.js`: orchestration لسجل المحادثة والمصادر والرد المتدفق.
 - `src/agents/autopilot-coordinator.js`: منسق آمن يقرر الخطوة التالية وحالات `continue`, `done`, و`blocked`.
+- `src/agents/platform-targets.js`: مصفوفة تحويل المنتج إلى Web/PWA/Mobile/Desktop/WebView ومعايير كل هدف.
 - `src/agents/prompts.js`: الشخصية المهنية وسياسة التفكير والرد.
+- `docs/DELIVERY_TARGETS.md`: عقد التسليم، مصفوفة المنصات، وRelease Gate.
+- `scripts/validate.mjs`: تحقق آلي من Manifest، الصلاحيات، Arena adapter، وأدوات المنصة.
 - `src/agents/context-builder.js`: بناء سياق آمن للصفحة والمصادر الإضافية.
 - `src/lib/gemini-client.js`: عميل Gemini الحديث، SSE، التفكير، الأدوات، المصادر، وإعادة المحاولة.
 - `src/lib/openai-compatible-client.js`: عميل SSE المشترك لـ OpenRouter وGroq.

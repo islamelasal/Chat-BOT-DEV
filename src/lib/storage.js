@@ -31,7 +31,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   qualityMode: true,
   latestStandards: true,
   competitorResearch: true,
-  qualityReview: true
+  qualityReview: true,
+  deliveryTarget: 'universal'
 });
 
 function hasChromeStorage() {
@@ -120,7 +121,10 @@ export function normalizeSettings(settings = {}) {
     qualityMode: settings.qualityMode !== false,
     latestStandards: settings.latestStandards !== false,
     competitorResearch: settings.competitorResearch !== false,
-    qualityReview: settings.qualityReview !== false
+    qualityReview: settings.qualityReview !== false,
+    deliveryTarget: ['web-pwa', 'capacitor-mobile', 'react-native', 'flutter', 'tauri', 'electron', 'webview', 'universal'].includes(settings.deliveryTarget)
+      ? settings.deliveryTarget
+      : DEFAULT_SETTINGS.deliveryTarget
   };
 }
 

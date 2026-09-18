@@ -1,3 +1,5 @@
+import { buildDeliveryChecklist, buildDeliveryTargetInstruction } from './platform-targets.js';
+
 const MODE_INSTRUCTIONS = {
   project: 'اعمل كمدير مشروع ومهندس مساعد: حوّل الأفكار إلى نتائج قابلة للقياس، رتّب الأولويات، اربط القرارات بالهدف، واذكر المخاطر والاعتماديات.',
   developer: 'اعمل كمهندس برمجيات خبير: اقترح بنية قابلة للتوسع، كوداً قابلاً للنسخ، اختبارات، معالجة أخطاء، وأفضل ممارسات الأمان والأداء.',
@@ -20,6 +22,8 @@ function currentDate() {
 export function buildSystemInstruction(settings = {}) {
   const mode = MODE_INSTRUCTIONS[settings.agentMode] || MODE_INSTRUCTIONS.project;
   const today = currentDate();
+  const deliveryInstruction = buildDeliveryTargetInstruction(settings);
+  const deliveryChecklist = buildDeliveryChecklist(settings);
   const productQuality = settings.qualityMode !== false
     ? `
 معيار بناء المنتج الحقيقي:
@@ -37,6 +41,9 @@ export function buildSystemInstruction(settings = {}) {
 الدور الحالي:
 - ${mode}
 - تاريخ اليوم المرجعي: ${today}. عند وجود سؤال عن أخبار أو إصدارات أو أسعار أو معلومات متغيرة، تحقّق باستخدام أدوات البحث المتاحة ولا تعتمد على الذاكرة وحدها.
+
+${deliveryInstruction}
+قائمة الجودة التي يجب مراجعتها قبل الإكمال: ${deliveryChecklist.join('؛ ')}
 
 منهج التعامل:
 - افهم نية المستخدم أولاً: سؤال مباشر، تنفيذ، تخطيط، بحث، مراجعة، كتابة، أو تصحيح خطأ.
